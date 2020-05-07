@@ -1,2 +1,4 @@
 setenv.sh
 paquebot_db.json
+db/*
+log/*

@@ -9,7 +9,6 @@ import os
 
 import gettext
 
-from bot.bot import Bot
 from bot.filter import Filter
 from bot.handler import HelpCommandHandler, UnknownCommandHandler, MessageHandler, FeedbackCommandHandler, \
 	CommandHandler, NewChatMembersHandler, LeftChatMembersHandler, PinnedMessageHandler, UnPinnedMessageHandler, \
@@ -23,13 +22,21 @@ import signal, time
 
 
 logging.config.fileConfig("logging.ini")
-log = logging.getLogger(__name__)
+log = logging.getLogger("Paquebot")
 
+import paquebot_bot
 
 import paquebot_commands as c
+
+com_logger = logging.getLogger("paquebot_commands")
+
 import paquebot_crew as crew
+
+crew_logger = logging.getLogger("paquebot_crew")
+
 import paquebot_db as db
 import paquebot_party as party
+
 
 	
 
@@ -40,166 +47,66 @@ NAME = os.getenv('ICQBOT_NAME', "BOT")
 VERSION = os.getenv('ICQBOT_VERSION', "1.0.0")
 TOKEN = os.getenv('ICQBOT_TOKEN', "XXX.XXXXXXXXXX.XXXXXXXXXX:XXXXXXXXX")
 OWNER = os.getenv('ICQBOT_OWNER', "XXXXXXXXX")
-TEST_CHAT = os.getenv('ICQBOT_TESTCHAT', "XXXXX")
-TEST_USER = os.getenv('ICQBOT_TESTUSER', "XXXXX")
 API_URL = "https://api.icq.net/bot/v1"
 
 
 ###########################################
 
+# Creating a new backend-storage
+loveboat_hold = db.Storage()
 
+# Creating a new crew
+loveboat_crew = crew.Crew(
+	maindb=loveboat_hold, 
+	owner = OWNER
+)
 
 # Creating a new bot instance.
-bot = Bot(token=TOKEN, name=NAME, version=VERSION, api_url_base=API_URL)
+loveboat = paquebot_bot.PaqueBot(token=TOKEN,
+	crew=loveboat_crew,
+	maindb=loveboat_hold,
+	name=NAME,
+	version=VERSION,
+	owner=OWNER,
+	api_url_base=API_URL,
+	timeout_s=5,
+	poll_time_s=2
+)
 
 
+
+
+# Intercepting stop signals
 def sigterm_handler(_signo, _stack_frame):
 	log.info('No Panic.. were are not the Titanic: %s'%(id))	
 	print("No Panic.. were are not the Titanic")
 	log.debug('Stopping bot')
-	bot.running = False
+	loveboat.running = False
 	sleep(2)
-	db.close()
+	loveboat_hold.close()
 	log.debug('Exiting')
 	os._exit(0)
-
-'''
-signal.signal(signal.SIGTERM, sigterm_handler)
-signal.signal(signal.SIGINT, sigterm_handler)
-'''
-
-
-
-def init():
-
-	db.init()
-
-	crew.init()
-
-
-
-
-def add_handlers(bot):
-
-	# Registering handlers #
-	# -------------------- #
-	# Handler for start command
-	bot.dispatcher.add_handler(StartCommandHandler(callback=c.start_cb))
-
-	# Handler for help command
-	bot.dispatcher.add_handler(HelpCommandHandler(callback=c.help_cb))
-
-	# Any other user command handler
-	bot.dispatcher.add_handler(CommandHandler(command="test", callback=c.test_cb))
-
-	# Handler for feedback command
-	bot.dispatcher.add_handler(FeedbackCommandHandler(target=OWNER))
-
-	# Handler for unknown commands
-	bot.dispatcher.add_handler(UnknownCommandHandler(callback=c.unknown_command_cb))
-
-	# Handler for private command with filter by user
-	bot.dispatcher.add_handler(CommandHandler(
-		command="restart",
-		filters=Filter.sender(user_id=OWNER),
-		callback=c.private_command_cb
-	))
-
-
-	# Handler for add user to chat
-	bot.dispatcher.add_handler(NewChatMembersHandler(callback=party.do_guestwelcome))
-
-	# Handler for left user from chat
-	bot.dispatcher.add_handler(LeftChatMembersHandler(callback=party.do_guestgoodbye))
-
-	# Handler for pinned message
-	bot.dispatcher.add_handler(PinnedMessageHandler(callback=c.pinned_message_cb))
-
-	# Handler for unpinned message
-	bot.dispatcher.add_handler(UnPinnedMessageHandler(callback=c.unpinned_message_cb))
-
-	# Handler for edited message
-	#bot.dispatcher.add_handler(EditedMessageHandler(callback=c.edited_message_cb))
-
-	# Handler for deleted message
-	bot.dispatcher.add_handler(DeletedMessageHandler(callback=c.deleted_message_cb))
-
-	# Handler for message with bot mention
-	bot.dispatcher.add_handler(MessageHandler(
-		filters=Filter.message & Filter.mention(user_id=bot.uin),
-		callback=c.message_with_bot_mention_cb
-	))
-
-	# Handler for mention something else
-	bot.dispatcher.add_handler(MessageHandler(
-		filters=Filter.mention() & ~Filter.mention(user_id=bot.uin),
-		callback=c.mention_cb
-	))
-
-	# Handler for simple text message without media content
-	bot.dispatcher.add_handler(MessageHandler(filters=Filter.text, callback=party.do_keepaneyeon))
-
-	# Handler with regexp filter
-	bot.dispatcher.add_handler(MessageHandler(filters=Filter.regexp("^\d*$"), callback=c.regexp_only_dig_cb))
-
-	# Handler for no media file. For example, text file
-	bot.dispatcher.add_handler(MessageHandler(filters=Filter.data, callback=c.file_cb))
-
-	# Handlers for other file types
-	bot.dispatcher.add_handler(MessageHandler(filters=Filter.image, callback=c.image_cb))
-	bot.dispatcher.add_handler(MessageHandler(filters=Filter.video, callback=c.video_cb))
-	bot.dispatcher.add_handler(MessageHandler(filters=Filter.audio, callback=c.audio_cb))
-
-	# Handler for sticker
-	bot.dispatcher.add_handler(MessageHandler(filters=Filter.sticker, callback=c.sticker_cb))
-
-	# Handler for url
-	bot.dispatcher.add_handler(MessageHandler(filters=Filter.url & ~Filter.sticker, callback=c.url_cb))
-
-	# Handlers for forward and reply getting
-	bot.dispatcher.add_handler(MessageHandler(filters=Filter.forward, callback=c.forward_cb))
-	bot.dispatcher.add_handler(MessageHandler(filters=Filter.reply, callback=c.reply_cb))
-
-	# Send command like this:
-	# /pin 6752793278973351456
-	# 6752793278973351456 - msgId
-	# Handler for pin command
-	# bot.dispatcher.add_handler(CommandHandler(command="pin", callback=c.pin_cb))
-
-	# Send command like this:
-	# /unpin 6752793278973351456
-	# 6752793278973351456 - msgId
-	# Handler for unpin command
-	# bot.dispatcher.add_handler(CommandHandler(command="unpin", callback=c.unpin_cb))
-
-	# Handler for bot buttons reply.
-	bot.dispatcher.add_handler(BotButtonCommandHandler(callback=c.buttons_answer_cb))
-
-
-	bot.dispatcher.add_handler(CommandHandler(command="joinparty", callback=c.join_party))
-	bot.dispatcher.add_handler(CommandHandler(command="refreshparty", callback=c.refresh_party))
-
-	bot.dispatcher.add_handler(CommandHandler(command="info", callback=c.info))	
 
 
 def main():
 
-	init()
+
+
 
 	catchable_sigs = set(signal.Signals) - {signal.SIGKILL, signal.SIGSTOP}
 	for sig in catchable_sigs:
 		signal.signal(sig, sigterm_handler)  # Substitute handler of choice for `print`
 
-	add_handlers(bot)
+
 
 	# Starting a polling thread watching for new events from server. This is a non-blocking call
 	# ---------------------------------------------------------------------------------------- #
-	bot.start_polling()
+	loveboat.start_polling()
 
 	# Call bot methods
 	# -------------- #
 	# Get info about bot
-	bot.self_get()
+	# bot.self_get()
 
 	'''
 	# Send message
@@ -305,8 +212,9 @@ def main():
 	'''
 	try:
 
-#		bot.idle()
-		while bot.running:
+		loveboat.idle()
+		while loveboat.running:
+			log.debug(" polling inside the main procedure")
 			sleep(1)
 	finally:
 		print('Goodbye')

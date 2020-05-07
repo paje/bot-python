@@ -3,6 +3,9 @@ import json
 import logging.config
 from time import sleep
 from gtts import gTTS
+import os
+
+import gettext
 
 from bot.bot import Bot
 from bot.filter import Filter
@@ -13,12 +16,12 @@ from bot.handler import HelpCommandHandler, UnknownCommandHandler, MessageHandle
 logging.config.fileConfig("logging.ini")
 log = logging.getLogger(__name__)
 
-NAME = ""
-VERSION = "0.0.0"
-TOKEN = "XXX.XXXXXXXXXX.XXXXXXXXXX:XXXXXXXXX"
-OWNER = "XXXXXXXXX"
-TEST_CHAT = "XXXXX"
-TEST_USER = "XXXXX"
+NAME = os.getenv('ICQBOT_NAME', "BOT")
+VERSION = os.getenv('ICQBOT_VERSION', "1.0.0")
+TOKEN = os.getenv('ICQBOT_TOKEN', "XXX.XXXXXXXXXX.XXXXXXXXXX:XXXXXXXXX")
+OWNER = os.getenv('ICQBOT_OWNER', "XXXXXXXXX")
+TEST_CHAT = os.getenv('ICQBOT_TESTCHAT', "XXXXX")
+TEST_USER = os.getenv('ICQBOT_TESTUSER', "XXXXX")
 API_URL = "https://api.icq.net/bot/v1"
 
 

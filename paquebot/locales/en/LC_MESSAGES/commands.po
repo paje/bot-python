@@ -1,0 +1,5 @@
+"Sorry, you should be at least CAPTAIN to add channel to parties"
+"%s added"
+"Sorry, got problem"
+"Hello! Let's start!"
+"Some help message"

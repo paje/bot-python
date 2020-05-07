@@ -4,19 +4,20 @@ import logging.config
 
 from alphabet_detector import AlphabetDetector
 
-
-
 from bot.bot import Bot
 from bot.filter import Filter
 from bot.handler import HelpCommandHandler, UnknownCommandHandler, MessageHandler, FeedbackCommandHandler, \
 	CommandHandler, NewChatMembersHandler, LeftChatMembersHandler, PinnedMessageHandler, UnPinnedMessageHandler, \
 	EditedMessageHandler, DeletedMessageHandler, StartCommandHandler, BotButtonCommandHandler
 
+import gettext
+_ = gettext.gettext
+
+import paquebot_bot
 import paquebot_db as db
 import paquebot_party as party
 import paquebot_crew as crew
 
-logging.config.fileConfig("logging.ini")
 log = logging.getLogger(__name__)
 
 ##########################################
@@ -26,18 +27,90 @@ log = logging.getLogger(__name__)
 #
 ##########################################
 
+Parties = {}
+
+def join_party(bot, event):
+
+	log.debug("Asked to join party")
+
+	crew = bot.get_crew()
+
+	if event.data["chat"]["type"] == "group":
+		request_place = event.data["chat"]["type"]
+		requester_uid = event.data["from"]["userId"]		
+		requested_cid = event.data["chat"]["chatId"]
+		request_msgid = event.data["msgId"]
+
+		print("%s ask to add %s"%(requester_uid, requested_cid))
+
+		# Requester level is sufficient --> adding channel as a party
+		if crew.is_member(requester_uid) and crew.is_captain(requester_uid):
+			log.debug('Addiing channel %s'%(requested_cid))
+
+
+			bot.delete_messages(requested_cid, request_msgid)
+
+			if requested_cid not in Parties:
+				Parties[requested_cid] = party.Party(bot, bot.maindb, requested_cid)
+				return True
+
+		# Requebster is know, but unsifficien level
+		elif loveboat_crew.is_member(requester_uid):
+			log.debug('Should be requested by a CAPTAIN')
+			bot.send_text(chat_id=event.data['chat']['chatId'], text=_("Sorry, you should be at least CAPTAIN to add channel to parties"))
+			bot.delete_messages(requested_cid, request_msgid)
+			return False
+
+		else:
+			return False
+
+
+	elif event.data["chat"]["type"] == "private":
+		requester_uid = event.data["from"]["userId"]		
+		(dummy, requested_cid) = event.data["text"].partition(" ")[::2]
+		request_msgid = event.data["msgId"]
+
+		if crew.is_member(requester_uid) and crew.is_captain(requester_uid):
+			log.debug('Addiing channel %s'%(requested_cid))
+
+			if requested_cid not in Parties:
+				Parties[requested_cid] = party.Party(bot, bot.maindb, requested_cid)
+				return True
+
+		elif crew.is_member(requester_uid):
+			log.debug("%s requested %s to be added, should be requested by a CAPTAIN"%(requester_uid, requested_cid))
+			bot.send_text(chat_id=event.data['chat']['chatId'], text=_("Sorry, you should be at least CAPTAIN to add channel to parties"))
+			return False
+		else:
+			return False
+
+	else:
+		log.debug("Unknown place to add")
+		return False
 
 def start_cb(bot, event):
-	bot.send_text(chat_id=event.data['chat']['chatId'], text="Hello! Let's start!")
+	if False:
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("Hello! Let's start!"))
 
 
 def help_cb(bot, event):
-	bot.send_text(chat_id=event.data['chat']['chatId'], text="Some message help")
+	if False:
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("Some help message"))
 
 
 def test_cb(bot, event):
 	if False:
 		bot.send_text(chat_id=event.data['chat']['chatId'], text="User command: {}".format(event.data['text']))
+
+
+def do_guestwelcome(bot, event):
+	pass
+
+def do_guestgoodbye(bot, event):
+	pass
+
+def do_keepaneyeon(bot, event):
+	pass
 
 
 def unknown_command_cb(bot, event):
@@ -78,8 +151,6 @@ def deleted_message_cb(bot, event):
 
 
 def message_with_bot_mention_cb(bot, event):
-
-
 	requester_uid = event.data["from"]["userId"]		
 	requested_cid = event.data["chat"]["chatId"]
 	request_msgid = event.data["msgId"]
@@ -222,9 +293,10 @@ def get_chatinfo(chat_id=id):
 		if info['ok'] == True:
 			pass
 
-def join_party(bot, event):
 
-	log.debug("Asked to join party")
+
+def refresh_party(bot, event):
+	logging.getLogger(__name__).debug('Refreshing party')
 
 	if event.data["chat"]["type"] == "group":
 		request_place = event.data["chat"]["type"]
@@ -232,54 +304,47 @@ def join_party(bot, event):
 		requested_cid = event.data["chat"]["chatId"]
 		request_msgid = event.data["msgId"]
 
-		print("%s ask to add %s"%(requester_uid, requested_cid))
+		print("%s ask to refresh %s"%(requester_uid, requested_cid))
 
 		if crew.is_member(requester_uid) and crew.is_captain(requester_uid):
-			print('Addiing channel %s'%(requested_cid))
-			if db.add_party(requested_cid):
-				refresh_party(bot, event)
-				bot.delete_messages(requested_cid, request_msgid)
-			# bot.get_chat_info(requested_cid)
-			return True
+			log.debug('Refreshing channel %s'%(requested_cid))
+			bot.delete_messages(requested_cid, request_msgid)
+			if party.refresh(bot, requested_cid):
+				bot.send_text(chat_id=event.data['chat']['chatId'], text="%s refreshed"%(requested_cid))
+				return True
+			else:
+				bot.send_text(chat_id=event.data['chat']['chatId'], text="Sorry, got problem")
+				return False
 		elif crew.is_member(requester_uid):
-			print('Should be requested by a CAPTAIN')
+			log.debug('Should be requested by a CAPTAIN')
+			bot.send_text(chat_id=event.data['chat']['chatId'], text="Sorry, you should be at least CAPTAIN to refresh party")
+			bot.delete_messages(requested_cid, request_msgid)
+			return False
 		else:
 			return False
 	elif event.data["chat"]["type"] == "private":
 		requester_uid = event.data["from"]["userId"]		
 		(dummy, requested_cid) = event.data["text"].partition(" ")[::2]
 		request_msgid = event.data["msgId"]
+
 		if crew.is_member(requester_uid) and crew.is_captain(requester_uid):
-			print('Addiing channel %s'%(requested_cid))
-			if db.add_party(requested_cid):
-				refresh_party(bot, event)
-			return True
+			log.debug('Refreshing channel %s'%(requested_cid))
+			if party.refresh(bot, requested_cid):
+				bot.send_text(chat_id=event.data['chat']['chatId'], text="%s refreshed"%(requested_cid))
+				return True
+			else:
+				bot.send_text(chat_id=event.data['chat']['chatId'], text="Sorry, got problem")
+				return False
 		elif crew.is_member(requester_uid):
-			print('Should be requested by a CAPTAIN')
+			log.debug('%s requested %s to be refreshed, should be requested by a CAPTAIN'%(requester_uid, requested_cid))
+			bot.send_text(chat_id=event.data['chat']['chatId'], text="Sorry, you should be at least CAPTAIN to refresh party")
+			return False
 		else:
 			return False
 
 	else:
-		print("Unknown place to add")
+		log.debug("Unknown place to refresh")
 		return False
-
-def refresh_party(bot, event):
-	logging.getLogger(__name__).debug('Refreshing party')
-
-	request_place = event.data["chat"]["type"]
-	if request_place == "group":
-
-		requester_uid = event.data["from"]["userId"]		
-		requested_cid = event.data["chat"]["chatId"]
-		request_msgid = event.data["msgId"]
-
-		party.refresh(bot, event)
-		bot.delete_messages(requested_cid, request_msgid)
-	elif request_place == "private":
-
-		print('Private message requestion party refresh %s'%(event.data))
-
-
 
 
 def info(bot, event):
@@ -329,24 +394,111 @@ def info(bot, event):
 			bot.send_text(chat_id=event.data['chat']['chatId'], text="Bad status")
 			return False
 	
-	'''
-	# Get info about chat
-	info = bot.get_chat_info(chat_id=command_body).json()['type']
-	bot.send_text(chat_id=event.data['chat']['chatId'], text="Infos: "+info.text)
-	print("*** INFO: "+ info.text)
 
-	# Get chat admins
-	admins = bot.get_chat_admins(chat_id=command_body).json()['title']
-	bot.send_text(chat_id=event.data['chat']['chatId'], text="Admins: "+admins.text)
-	print("*** INFO: "+ admins.text.description)
+def list_charsets(bot, event):
 
-	# Get chat members
-	bot.get_chat_members(chat_id=command_body)
-	# Get chat blocked users
-	bot.get_chat_blocked_users(chat_id=command_body)
-	# Get chat pending users
-	bot.get_chat_pending_users(chat_id=command_body)
-	'''
+	log.debug('Listing charsets')
+	request_place = event.data["chat"]["type"]
+	requester_uid = event.data["from"]["userId"]		
+	requested_cid = event.data["chat"]["chatId"]
+	request_msgid = event.data["msgId"]
+	command, command_body = event.data["text"].partition(" ")[::2]
 
+	bot.send_text(chat_id=requester_uid, text="Available charsets are:")
+	for charset in sorted(set(party.list_availablecharsets(bot))):
+		bot.send_text(chat_id=event.data['chat']['chatId'], text="\t%s"%(charset))
+	return True
+
+
+############################
+#
+# set party tolerated charsets
+# CAPTAIN at least
+#
+############################
+def set_partycharsets(bot, event):
+
+
+	log.debug('Setting party charsets')
+
+
+	if event.data["chat"]["type"] == "group":
+		request_place = event.data["chat"]["type"]
+		requester_uid = event.data["from"]["userId"]		
+		requested_cid = event.data["chat"]["chatId"]
+		request_msgid = event.data["msgId"]
+		command, command_body = event.data["text"].partition(" ")[::2]
+
+		log.debug("%s ask to set charsets %s to %s"%(requester_uid, command_body, requested_cid))
+
+		if crew.is_member(requester_uid) and crew.is_captain(requester_uid):
+			party.add_partycharsets(bot, requested_cid, command_body.split(" "))
+			bot.delete_messages(requested_cid, request_msgid)
+		elif crew.is_member(requester_uid):
+			log.debug('Should be requested by a CAPTAIN')
+			bot.send_text(chat_id=event.data['chat']['chatId'], text="Sorry, you should be at least CAPTAIN to do this")
+			bot.delete_messages(requested_cid, request_msgid)
+			return False
+		else:
+			return False
+	elif event.data["chat"]["type"] == "private":
+		requester_uid = event.data["from"]["userId"]		
+		(command, body) = event.data["text"].partition(" ")[::2]
+		(requested_cid, charsets) = body.partition(" ")[::2]
+		request_msgid = event.data["msgId"]
+
+		if crew.is_member(requester_uid) and crew.is_captain(requester_uid):
+			log.debug('Setting charsets on %s'%(requested_cid))
+			party.add_partycharsets(bot, requested_cid, charsets.split(" "))
+		elif crew.is_member(requester_uid):
+			log.debug('%s requested %s to be refreshed, should be requested by a CAPTAIN'%(requester_uid, requested_cid))
+			bot.send_text(chat_id=event.data['chat']['chatId'], text="Sorry, you should be at least CAPTAIN to refresh party")
+			return False
+		else:
+			return False
+
+	else:
+		log.debug("Dont know what to do")
+		return False
+
+
+############################
+#
+# set party tolerated charsets
+# any crew member
+#
+############################
+def list_partycharsets(bot, event):
+
+	log.debug('Listing party charsets')
+
+	if event.data["chat"]["type"] == "group":
+		request_place = event.data["chat"]["type"]
+		requester_uid = event.data["from"]["userId"]		
+		requested_cid = event.data["chat"]["chatId"]
+		request_msgid = event.data["msgId"]
+
+		print("%s listing charsets on %s"%(requester_uid, requested_cid))
+
+		if crew.is_member(requester_uid):
+			bot.delete_messages(requested_cid, request_msgid)
+			bot.send_text(chat_id=event.data['chat']['chatId'], text="Charsets %s"%(party.list_partycharsets(bot, requested_cid)))
+		else:
+			return False
+	elif event.data["chat"]["type"] == "private":
+		requester_uid = event.data["from"]["userId"]		
+		(dummy, requested_cid) = event.data["text"].partition(" ")[::2]
+		request_msgid = event.data["msgId"]
+
+		print("%s listing charsets on %s"%(requester_uid, requested_cid))
+
+		if crew.is_member(requester_uid):
+			log.debug('Refreshing channel %s'%(requested_cid))
+			bot.send_text(chat_id=event.data['chat']['chatId'], text="Charsets %s"%(party.list_partycharsets(bot, requested_cid)))
+		else:
+			return False
+	else:
+		log.debug("Dont know what to do")
+		return False
 
 
