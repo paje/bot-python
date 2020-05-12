@@ -207,7 +207,7 @@ def acceptcommand(bot, event, crew, order, grade):
 
 	command = ReceivedCommand(order, event)
 	
-	if command.place is not 'error':
+	if command.place != 'error':
 		# Should be a member to accept the command
 		if crew.is_member(command.from_uid):
 			# Deleting request (to clean the room)

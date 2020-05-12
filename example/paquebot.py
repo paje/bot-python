@@ -14,10 +14,6 @@ from bot.handler import HelpCommandHandler, UnknownCommandHandler, MessageHandle
 	CommandHandler, NewChatMembersHandler, LeftChatMembersHandler, PinnedMessageHandler, UnPinnedMessageHandler, \
 	EditedMessageHandler, DeletedMessageHandler, StartCommandHandler, BotButtonCommandHandler
 
-from tinydb import TinyDB, Query
-from tinydb.middlewares import CachingMiddleware
-from tinydb.storages import JSONStorage
-
 import signal, time
 
 
