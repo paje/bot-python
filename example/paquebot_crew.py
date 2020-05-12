@@ -13,6 +13,7 @@ from bot.handler import HelpCommandHandler, UnknownCommandHandler, MessageHandle
 import paquebot_bot
 import paquebot_db as db
 import paquebot_party as party
+from paquebot_db import CrewGrades as grades
 
 
 log = logging.getLogger(__name__)
@@ -26,25 +27,19 @@ log = logging.getLogger(__name__)
 ##########################################
 
 
-#
-# BOT ROLES
-DIRECTOR = 40
-CAPTAIN = 20
-SECOND = 10
-BARTENDER = 5
-
 class Crew():
 
 	def __init__(self, maindb, owner):
 
 		# maindb = db.Storage()
 		logging.getLogger(__name__).debug('Initializing Crew')
-		logging.getLogger(__name__).debug('%d admins already defined'%(len(maindb.list_crewmembers())))
 
 		self.maindb = maindb
 
-		if len(self.maindb.list_crewmembers()) == 0:
-			self.maindb.add_crewmember(owner, "OWNER", DIRECTOR)
+		logging.getLogger(__name__).debug('%d admins already defined'%(self.size()))
+
+		if self.size() == 0:
+			self.add(owner, "OWNER", grades.DIRECTOR)
 
 			'''
 			maindb.add_crewmember("12963645", "alapaje", DIRECTOR)
@@ -62,37 +57,68 @@ class Crew():
 			print("%s is a crew member"%('12963645'))
 		'''
 
+	def add(self, Uid, Nickname, Grade):
+		log.debug("crew: adding a crew member %s"%Uid)
+		
+		if not self.is_member(Uid):
+			crewman = db.CrewManStorage(Uid, Nickname, Grade)
+
+			if crewman is not None:
+				db.store_crewman(self.maindb, crewman)
+				return True
+			else:
+				log.debug("crewman creation problem")
+				return False
+		else:
+			log.debug("crew:  crew member %s is already exising"%Uid)
+			return False
+
+	def size(self):
+		return db.size_crew(self.maindb)
+
 	def is_member(self, Uid):
-		return self.maindb.is_crewmember(Uid)
+		log.debug("Returning if %s is a member or not", Uid)
+
+		if  db.is_crewman(self.maindb, Uid):
+			return True
+		else:
+			return False
+
 
 	def is_director(self, Uid):
-		if self.maindb.get_crewmember(Uid)['Role'] >= DIRECTOR:
+
+		if self.maindb.get_crewmember(Uid).grade >= db.CrewGrades.DIRECTOR:
 			return True
 		else:
 			return False
 
 	def is_captain(self, Uid):
-		crewmember = self.maindb.get_crewmember(Uid)
 
-		if crewmember.grade >= CAPTAIN:
+		if self.is_member(Uid):
+			crewman = db.load_crewman(self.maindb, Uid)
+
+		if crewman.grade >= grades.CAPTAIN:
 			return True
 		else:
 			return False
 
 	def is_second(self, Uid):
-		if self.maindb.get_crewmember(Uid)['Role'] >= SECOND:
+		if self.maindb.get_crewmember(Uid).grade >= db.CrewGrades.SECOND:
 			return True
 		else:
 			return False
 
 	def is_bartender(self, Uid):
-		if self.maindb.get_crewmember(Uid)['Role'] >= BARTENDER:
+		if self.maindb.get_crewmember(Uid).grade >= db.CrewGrades.BARTENDER:
 			return True
 		else:
 			return False
 
-	def add(self):
-		pass
+	def get_grade(self, Uid):
+		if self.maindb.get_crewmember(Uid).grade >= db.CrewGrades.BARTENDER:
+			pass
+
+
 
 	def delete(self):
 		pass

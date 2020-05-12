@@ -23,6 +23,7 @@ class CrewGrades(IntEnum):
 	SECOND = 10
 	BARTENDER = 5
 	SEAMAN = 1
+	GUEST = 0
 
 class PersonStorage(object):
 	id = Column(String(128), primary_key=True, index=True)
@@ -39,12 +40,12 @@ class GuestStorage(PersonStorage, Base):
 
 
 
-class CrewStorage(PersonStorage, Base):
+class CrewManStorage(PersonStorage, Base):
 	__tablename__ = 'Crew'
 
-	grade = Column(Integer, default=CrewGrades.SEAMAN)
+	grade = Column(Integer, default=CrewGrades.GUEST)
 
-	def __init__(self, Uid, Nickname, Grade):
+	def __init__(self, Uid=0, Nickname="", Grade=CrewGrades.GUEST):
 		self.id = Uid
 		self.nickname = Nickname
 		self.grade = Grade
@@ -54,13 +55,33 @@ class CrewStorage(PersonStorage, Base):
 class PartyStatus(IntEnum):
 	# Status
 	ADMIN = 4
-	VOLUBLE = 3
+	VOLUBILE = 3
 	WATCHING = 2
 	NONMANAGED = 1
 
+def levelexists(level):
+	intLevel = int(level)
+	log.debug("Checking if %d level exists in the hierarchie"%intLevel)
+	if intLevel == PartyStatus.ADMIN or intLevel == PartyStatus.VOLUBILE or intLevel == PartyStatus.WATCHING or intLevel == PartyStatus.NONMANAGED:
+		return True
+	else:
+		return False
 
 class PartyStorage(Base):
 	__tablename__ = 'Party'
+
+	alphabets = [
+		'GREEK',
+		'CYRILLIC',
+		'LATIN',
+		'ARABIC',
+		'HEBREW',
+		'CJK',
+		'HANGUL',
+		'HIRAGANA',
+		'KATAKANA',
+		'THAI'
+	]
 
 	id = Column(String(128), primary_key=True)
 
@@ -71,11 +92,27 @@ class PartyStorage(Base):
 	locale = Column(String(2), default="en")
 	authorized_charsets = Column(String(128), default="")
 	authorized_languages = Column(String(128), default="")
-	lastaction_ts = Column(DateTime, onupdate=func.now(), index=True)
+	# lastaction_ts = Column(DateTime, onupdate=func.now(), index=True)
+
+	rules_msg = Column(String(256), default="")
+	language_msg = Column(String(256), default="")
+
+
 
 	def __init__(self, cid):
 		self.id = cid
 		self.status = int(PartyStatus.NONMANAGED)
+
+
+		status = PartyStatus.NONMANAGED
+
+		timezone = "UTC"
+		locale = "en"
+		authorized_charsets = ""
+		authorized_languages = ""
+
+		rules_msg = ""
+		language_msg = ""
 
 
 
@@ -145,30 +182,23 @@ class Storage():
 
 	def add_crewmember(self, Uid, Nickname, Role):
 		log.debug('adding crewmember %s %s %d'%(Uid, Nickname, Role))
-		if self.paquebot_db.query(CrewStorage).filter(CrewStorage.id == Uid).count() == 0:
-			newcrew = CrewStorage(Uid, Nickname, Role)
+		if self.paquebot_db.query(CrewManStorage).filter(CrewManStorage.id == Uid).count() == 0:
+			newcrew = CrewManStorage(Uid, Nickname, Role)
 			self.paquebot_db.add(newcrew)
 			self.paquebot_db.commit()
+			self.paquebot_db.flush()
 			return True
 		else:
 			return False
 
 	def get_crewmember(self, Uid):
 		log.debug('get_crewmember %s'%(Uid))
-		return self.paquebot_db.query(CrewStorage).filter(CrewStorage.id == Uid).first()
+		return self.paquebot_db.query(CrewManStorage).filter(CrewManStorage.id == Uid).first()
 
 	def del_crewmember(self, Uid):
 		log.debug('Deleting crewmember %s'%(Uid))
-		if  self.paquebot_db.query(CrewStorage).delete(CrewStorage.id == Uid):
+		if  self.paquebot_db.query(CrewManStorage).delete(CrewManStorage.id == Uid):
 			self.paquebot_db.commit()
-			return True
-		else:
-			return False
-
-	def is_crewmember(self, Uid):
-		log.debug('is crewmember %s'%(Uid))
-
-		if self.paquebot_db.query(CrewStorage).filter(CrewStorage.id == Uid).count() > 0:
 			return True
 		else:
 			return False
@@ -176,7 +206,7 @@ class Storage():
 	def list_crewmembers(self):
 		log.debug('Listing all crewmembers')
 
-		return self.paquebot_db.query(CrewStorage).all()
+		return
 
 	def add_party(self, channelId):
 		log.debug('adding party %s'%(channelId))
@@ -185,10 +215,10 @@ class Storage():
 			newparty = PartyStorage(channelId)
 			self.paquebot_db.add(newparty)
 			self.paquebot_db.commit()
+			self.paquebot_db.flush()
 			return True
 		else:
 			return False
-
 
 	def is_partyon(self, channelId):
 		log.debug('returning party  %s status'%(channelId))
@@ -198,11 +228,6 @@ class Storage():
 			return party.status
 		else:
 			return False
-
-
-	def get_party(self, channelId):
-		log.debug('get party %s'%(channelId))
-		return self.paquebot_db.query(PartyStorage).filter(PartyStorage.id == channelId).first()
 
 	def del_party(self, channelId):
 		log.debug('Deleting party %s'%(channelId))
@@ -283,5 +308,93 @@ class Storage():
 		log.debug('Deleting an entry in whoiswhere')
 		pass
 
+
+def size_parties(db):
+	return db.paquebot_db.query(PartyStorage).count()
+
+
+def is_party(db, channelId):
+	log.debug('DB: testing if a party exists %s'%(channelId))
+
+	if db.paquebot_db.query(PartyStorage).filter(PartyStorage.id == channelId).count() > 0:
+		return True
+	else:
+		return False
+
+def load_party(db, channelId):
+	log.debug('DB: gettin party %s'%(channelId))
+	return db.paquebot_db.query(PartyStorage).filter(PartyStorage.id == channelId).first()
+
+
+def store_party(db, party):
+	log.debug('DB: storiing party %s'%(party.id))
+
+	if db.paquebot_db.query(PartyStorage).filter(PartyStorage.id == party.id).count() > 0:
+		log.debug('Party %s found in DB, updating it'%party.id)
+
+		stored_party = db.paquebot_db.query(PartyStorage).filter(PartyStorage.id == party.id).first()
+		stored_party.status = party.status
+		stored_party.timezone = party.timezone
+		stored_party.locale = party.locale
+		stored_party.authorized_charsets = party.authorized_charsets
+		stored_party.authorized_languages = party.authorized_languages
+
+		stored_party.rules_msg = party.rules_msg
+		stored_party.language_msg = party.language_msg
+
+		# stored_party = party
+		db.paquebot_db.commit()
+	else:
+		log.debug('Creating a new row for party %s'%party.id)
+		db.paquebot_db.add(party)
+		db.paquebot_db.commit()
+	return True
+
+def list_parties(db):
+	log.debug('DB: listing parties')
+	return db.paquebot_db.query(PartyStorage).all()
+
+
+def size_crew(db):
+	return db.paquebot_db.query(CrewManStorage).count()
+
+def is_crewman(db, Uid):
+	log.debug('DB: Is %s a crewman ?'%(Uid))
+
+	if db.paquebot_db.query(CrewManStorage).filter(CrewManStorage.id == Uid).count() > 0:
+		wcman = db.paquebot_db.query(CrewManStorage).filter(CrewManStorage.id == Uid).first()
+
+		if wcman.grade > CrewGrades.GUEST:
+			log.debug('%s is in the Navy !!'%Uid)
+
+			return True
+		else:
+			log.debug('grade is unsufficient %d to be considered as a crew'%wcman.grade)
+			return False
+	else:
+		log.debug('no crewman with the corresponding ID %s'%Uid)
+		return False
+
+def load_crewman(db, Uid):
+	log.debug('DB: gettin crewman %s'%(Uid))
+	return db.paquebot_db.query(CrewManStorage).filter(CrewManStorage.id == Uid).first()
+
+
+def store_crewman(db, crewman):
+	log.debug('DB: storing crew %s'%(crewman.id))
+
+	if db.paquebot_db.query(CrewManStorage).filter(CrewManStorage.id == crewman.id).count() > 0:
+		log.debug('Crew  %s found in DB, updating it'%crewman.id)
+
+		stored_crewman = db.paquebot_db.query(CrewManStorage).filter(CrewManStorage.id == crewman.id).first()
+		stored_crewman = party
+		db.paquebot_db.commit()
+
+	else:
+		log.debug('Creating a new row for crewman %s'%crewman.id)
+
+		db.paquebot_db.add(crewman)
+		db.paquebot_db.commit()
+	return True
 
 

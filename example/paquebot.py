@@ -52,7 +52,7 @@ API_URL = "https://api.icq.net/bot/v1"
 
 ###########################################
 
-# Creating a new backend-storage
+# Creating a new backend-storage or accessing the existing one
 loveboat_hold = db.Storage()
 
 # Creating a new crew
@@ -70,7 +70,7 @@ loveboat = paquebot_bot.PaqueBot(token=TOKEN,
 	owner=OWNER,
 	api_url_base=API_URL,
 	timeout_s=5,
-	poll_time_s=2
+	poll_time_s=5
 )
 
 
@@ -210,7 +210,10 @@ def main():
 				  ])))
 
 	'''
+
+	'''
 	try:
+
 
 		loveboat.idle()
 		while loveboat.running:
@@ -218,6 +221,7 @@ def main():
 			sleep(1)
 	finally:
 		print('Goodbye')
+	'''
 
 
 if __name__ == "__main__":
