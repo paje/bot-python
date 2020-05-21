@@ -2,12 +2,14 @@ import io
 import json
 import logging
 import logging.config
+import configparser
 
 from time import sleep
 from gtts import gTTS
 import os
 
 import gettext
+_ = gettext.gettext
 
 from bot.filter import Filter
 from bot.handler import HelpCommandHandler, UnknownCommandHandler, MessageHandler, FeedbackCommandHandler, \
@@ -33,27 +35,34 @@ crew_logger = logging.getLogger("paquebot_crew")
 import paquebot_db as db
 import paquebot_party as party
 
-
 	
 
 ###########################################
+config = configparser.ConfigParser()
+config.read('paquebot.ini')
+NAME = config['default']['ICQBOT_NAME']
+VERSION = config['default']['ICQBOT_VERSION']
+TOKEN = config['default']['ICQBOT_TOKEN']
+OWNER = config['default']['ICQBOT_OWNER']
+API_URL = config['default']['ICQBOT_API_URL']
 
-
+'''
 NAME = os.getenv('ICQBOT_NAME', "BOT")
 VERSION = os.getenv('ICQBOT_VERSION', "1.0.0")
 TOKEN = os.getenv('ICQBOT_TOKEN', "XXX.XXXXXXXXXX.XXXXXXXXXX:XXXXXXXXX")
 OWNER = os.getenv('ICQBOT_OWNER', "XXXXXXXXX")
 API_URL = "https://api.icq.net/bot/v1"
-
+'''
 
 ###########################################
+
 
 # Creating a new backend-storage or accessing the existing one
 loveboat_hold = db.Storage()
 
 # Creating a new crew
 loveboat_crew = crew.Crew(
-	maindb=loveboat_hold, 
+	mainsession=loveboat_hold.paquebot_db, 
 	owner = OWNER
 )
 
@@ -71,11 +80,12 @@ loveboat = paquebot_bot.PaqueBot(token=TOKEN,
 
 
 
-
 # Intercepting stop signals
 def sigterm_handler(_signo, _stack_frame):
 	log.info('No Panic.. were are not the Titanic: %s'%(id))	
 	print("No Panic.. were are not the Titanic")
+	# Send alive message
+	loveboat.send_text(chat_id=OWNER, text="[Dying] I have offended my Master and mankind because my work did not reach the quality it should have.")
 	log.debug('Stopping bot')
 	loveboat.running = False
 	sleep(2)
@@ -87,12 +97,15 @@ def sigterm_handler(_signo, _stack_frame):
 def main():
 
 
-
+	log.debug('Launching %s with token %s owner %s'%(NAME, TOKEN, OWNER))
+	print('Launching %s with token %s owner %s'%(NAME, TOKEN, OWNER))
 
 	catchable_sigs = set(signal.Signals) - {signal.SIGKILL, signal.SIGSTOP}
 	for sig in catchable_sigs:
 		signal.signal(sig, sigterm_handler)  # Substitute handler of choice for `print`
 
+	# Send alive message
+	loveboat.send_text(chat_id=OWNER, text="[Alive] Hello my Master, i'm alive now")
 
 
 	# Starting a polling thread watching for new events from server. This is a non-blocking call

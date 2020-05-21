@@ -1,6 +1,6 @@
 from bot.bot import Bot, LoggingHTTPAdapter, BotLoggingHTTPAdapter, FileNotFoundException, SkipDuplicateMessageHandler
 from bot.filter import Filter
-from bot.handler import HelpCommandHandler, UnknownCommandHandler, MessageHandler, FeedbackCommandHandler, \
+from bot.handler import UnknownCommandHandler, MessageHandler, FeedbackCommandHandler, \
 	CommandHandler, NewChatMembersHandler, LeftChatMembersHandler, PinnedMessageHandler, UnPinnedMessageHandler, \
 	EditedMessageHandler, DeletedMessageHandler, StartCommandHandler, BotButtonCommandHandler
 
@@ -21,11 +21,16 @@ import paquebot_commands as command
 import paquebot_party as party
 import paquebot_marinegunner as gunner
 
+from paquebot_crew import CrewGrades as grades
+from paquebot_whoiswhere import Whoiswhere as wiw
+from paquebot_party import Parties as parties
+
 
 log = logging.getLogger(__name__)
 
 
 # log = logging.getLogger(__name__)
+
 
 # Manage interactions with ICQ
 class PaqueBot(Bot):
@@ -61,29 +66,91 @@ class PaqueBot(Bot):
 		self.maindb = maindb
 		
 
-		# Registering handlers #
-		# -------------------- #
-		# Handler for start command
+		self.parties = parties(self, maindb.paquebot_db)
+
+
+
+		'''
+		  Buttons
+		'''
+
+		# Handler for bot buttons reply.
+		self.dispatcher.add_handler(BotButtonCommandHandler(callback=command.answer_buttons))
+
+
+
+
+		'''
+		  Commands
+		'''
+
 		self.dispatcher.add_handler(StartCommandHandler(callback=command.start))
 
-		'''
-		self.dispatcher.add_handler(CommandHandler(command="stop",
-			callback=command.test_cb))
-		'''
-
-		self.dispatcher.add_handler(CommandHandler(command="startstop_bot", callback=command.test_cb))
-
-
 		# Handler for help command
-		self.dispatcher.add_handler(HelpCommandHandler(callback=command.help))
+		#self.dispatcher.add_handler(HelpCommandHandler(callback=command.help))
+		self.dispatcher.add_handler(CommandHandler(command="help", callback=command.help))
 
 
-		# Handler for simple text message without media content
-		self.dispatcher.add_handler(MessageHandler(filters=Filter.text, callback=gunner.watchtxt))
-		
+
+
 		# Start obersing a channel
-		self.dispatcher.add_handler(CommandHandler(command="setlanguagemsg", callback=command.setlanguagemsg))
+		self.dispatcher.add_handler(CommandHandler(command="joinparty", callback=command.join_party))
 
+		# List managed channels
+		self.dispatcher.add_handler(CommandHandler(command="listparties", callback=command.list_parties))
+
+		# List managed channels
+		self.dispatcher.add_handler(CommandHandler(command="setpartylevel", callback=command.set_partyinteraction))
+
+
+		'''
+		# Refresh channel informations (admins, memnbers, blocked, ...)
+		self.dispatcher.add_handler(CommandHandler(command="refreshparty", callback=command.refresh_party))
+		'''
+
+		# Fix the allowed charsets
+		self.dispatcher.add_handler(CommandHandler(command="setpartycharsets", callback=command.set_partycharsets))
+
+		'''
+		self.dispatcher.add_handler(CommandHandler(command="addpartycharset", callback=command.add_partycharset))
+		'''
+
+		# List allowed charsets in a party
+		self.dispatcher.add_handler(CommandHandler(command="listpartycharsets", callback=command.list_partycharsets))
+
+
+		# Setting language msg
+		self.dispatcher.add_handler(CommandHandler(command="setlanguagemsg", callback=command.set_languagemsg))
+
+		# Gettin language msg
+		self.dispatcher.add_handler(CommandHandler(command="getlanguagemsg", callback=command.get_languagemsg))
+
+
+
+		# List allowed charsets in a party
+		self.dispatcher.add_handler(CommandHandler(command="listcrew", callback=command.list_crewmembers))
+		self.dispatcher.add_handler(CommandHandler(command="addcrewmember", callback=command.add_crewmember))
+		self.dispatcher.add_handler(CommandHandler(command="delcrewmember", callback=command.del_crewmember))
+
+
+
+
+
+		'''
+		  non-command handlers
+		'''
+
+		# Handler for message with bot mention
+		self.dispatcher.add_handler(MessageHandler(
+			filters=Filter.message & Filter.mention(user_id=self.uin),
+			callback=command.message_with_bot_mention_cb
+		))	
+
+		# Handler for simple text message without text content
+		self.dispatcher.add_handler(MessageHandler(filters=Filter.text, callback=gunner.watch_txt))
+		# same for forward and reply getting
+		self.dispatcher.add_handler(MessageHandler(filters=Filter.forward, callback=gunner.watch_txt))
+		self.dispatcher.add_handler(MessageHandler(filters=Filter.reply, callback=gunner.watch_txt))	
 
 		# Any other user command handler
 		#self.dispatcher.add_handler(CommandHandler(command="test", callback=command.test_cb))
@@ -140,11 +207,6 @@ class PaqueBot(Bot):
 		'''
 
 
-		# Handler for message with bot mention
-		self.dispatcher.add_handler(MessageHandler(
-			filters=Filter.message & Filter.mention(user_id=self.uin),
-			callback=command.message_with_bot_mention_cb
-		))
 
 		'''
 		# Handler for mention something else
@@ -207,29 +269,8 @@ class PaqueBot(Bot):
 
 
 
-		# Handler for bot buttons reply.
-		self.dispatcher.add_handler(BotButtonCommandHandler(callback=command.buttonsanswer))
 
-		# Start obersing a channel
-		self.dispatcher.add_handler(CommandHandler(command="joinparty", callback=command.joinparty))
 
-		# List managed channels
-		self.dispatcher.add_handler(CommandHandler(command="listparties", callback=command.listparties))
-
-		'''
-		# Refresh channel informations (admins, memnbers, blocked, ...)
-		self.dispatcher.add_handler(CommandHandler(command="refreshparty", callback=command.refresh_party))
-		'''
-
-		# Fix the allowed charsets
-		self.dispatcher.add_handler(CommandHandler(command="setpartycharsets", callback=command.setpartycharsets))
-
-		'''
-		self.dispatcher.add_handler(CommandHandler(command="addpartycharset", callback=command.add_partycharset))
-		'''
-
-		# List allowed charsets in a party
-		self.dispatcher.add_handler(CommandHandler(command="listpartycharsets", callback=command.list_partycharsets))
 
 		'''
 		# List available charsets
@@ -285,3 +326,5 @@ class PaqueBot(Bot):
 			if self.running:
 				self.running = False
 			self.__polling_thread.join()
+
+

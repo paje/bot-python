@@ -1,6 +1,15 @@
 import json, re
 import logging
 import logging.config
+import operator
+from enum import IntEnum, Enum, unique
+from datetime import datetime
+import pytz	
+
+from sqlalchemy import create_engine, inspect, Column, String, Integer, DateTime, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql import func
 
 
 from bot.bot import Bot
@@ -12,344 +21,298 @@ from bot.handler import HelpCommandHandler, UnknownCommandHandler, MessageHandle
 import paquebot_bot
 import paquebot_db as db
 
+
 log = logging.getLogger(__name__)
 
-
-##########################################
-#
-# Partu module
-# Party mamagement functions
-#
-##########################################
-class Party(db.PartyStorage):
-
-	def __init__(self, bot, maindb, chatId):
-
-		'''
-		  Inheritaded properties
-
-		id = Column(String(128), primary_key=True)
-		status = Column(Integer, default=PartyStatus.NONMANAGED)
-		timezone = Column(String(128), default="UTC" )
-		locale = Column(String(2), default="en")
-		authorized_charsets = Column(String(128), default="")
-		authorized_languages = Column(String(128), default="")
-		rules_msg = Column(String(256), default="")
-		language_msg = Column(String(256), default="")
-
-		'''
-
-		#self.language_msg = ""
-		#self.rules_msg = ""
+@unique
+class PartyStatus(IntEnum):
+	# Status
+	ADMIN = 4
+	VOLUBILE = 3
+	WATCHING = 2
+	NONMANAGED = 1
 
 
-		log.debug("Initiating a new party with cid %s"%chatId)
-		self.bot = bot
-		self.maindb = maindb
-		self.id = chatId
+class PartyStorage(db.Base):
+	__tablename__ = 'Party'
+
+	alphabets = [
+		'ARABIC',
+		'CJK',
+		'CYRILLIC',
+		'GREEK',
+		'HANGUL',
+		'HEBREW',
+		'HIRAGANA',
+		'KATAKANA',
+		'LATIN',
+		'THAI'
+	]
+
+	id = Column(String(128), primary_key=True)
+
+	status = Column(Integer, default=PartyStatus.NONMANAGED)
+
+	timezone = Column(String(128), default="UTC" )
+	locale = Column(String(2), default="en")
+
+	rules_msg = Column(String(256), default="")
+
+	authorized_charsets = Column(String(128), default="")
+	authorized_languages = Column(String(128), default="")
+	language_msg = Column(String(256), default="")
+	languageredemption_d = Column(Integer, default=1)
+	languagewarning_msgid = Column(String(64), default="")
+
+	def __init__(self, cid):
+		self.id = cid
+		self.status = int(PartyStatus.NONMANAGED)
 
 
-		'''	
-		  Non persistant data
-		'''
-		log.debug("Initiating non persistant data")
-		self.last_welcomemsgId = ""
-		self.last_languagemsgId = ""
+		self.status = PartyStatus.NONMANAGED
 
+		self.timezone = "UTC"
+		self.locale = "en"
 
-		log.debug("Adding %s to the parties"%(self.id))
-		if not self.is_partyon():
-			log.debug("Creating the party %s"%(self.id))
-
-			self.maindb.add_party(self.id)
-
-		else:
-			log.debug("Loading the party %s configuration from db"%(self.id))
-			self.load()
-
-
-		'''
-		log.debug("Refreshing party %s data"%(chatId))
-		self.refresh()
-		'''
-
-	# Load party content from the db asset
-	def load(self):
-		log.debug("party: load %s"%self.id)
-
-		stored_party = db.PartyStorage(self.id)
-		stored_party = db.load_party(self.maindb, self.id)
-
-		if stored_party is not None:
-			self.status = stored_party.status
-			self.timezone = stored_party.timezone	
-			self.locale = stored_party.locale
-			self.authorized_charsets = stored_party.authorized_charsets
-			self.authorized_languages = stored_party.authorized_languages
-			self.rules_msg = stored_party.rules_msg
-			self.language_msg = stored_party.language_msg
-		else:
-			log.debug("Unable to load the specified party")
-			return False
-
-	# Storing party information on the disk
-	def store(self):
-		log.debug("party: store %s"%self.id)
-		db.store_party(self.maindb, self)
-
-
-	# Return true is a party is managed somehow
-	def is_partyon(self):
-		log.debug("party: is_partyon %s"%self.id)
-
-		return self.maindb.is_partyon(self.id)
-
-
-	def setlevel(self, level):
-
-		log.debug("Party Setting level %s on party %s"%(level, self.id))
-		if db.levelexists(level):
-			self.status = int(level)
-			self.store()
-			return True
-		else:
-			log.debug('Grade %s is not coherent with the grade list'%level)
-			return False
-
-
-
-	def addcharset(self, charset):
-
-		log.debug("Add charsets %s to party %s"%(charset, self.id))
-
-		if not self.authorized_charsets:
-			self.authorized_charsets = ""
-			log.debug("Creating charsets for party %s"%(self.id))
-		else:
-			log.debug("Configured charsets : %s"%(self.authorized_charsets))
-
-
-		if charset in self.alphabets:
-			log.debug("%s is a known charset, adding it"%charset)
-			charsets = list(self.authorized_charsets.split(" "))
-			if charset not in charsets:
-				charsets.append(charset)
-				self.authorized_charsets = str(' '.join(charsets))
-				log.debug('adding that charset')
-				self.store()
-			else:
-				log.debug('nothing to do, already configured')
-
-
-			return True
-		else:
-			log.debug("%s is unknown, can' add it"%charset)
-			return False
-
-		log.debug("Now charsets for %s are %s"%(self.id, self.authorized_charsets))
-
-
-	def resetcharset(self):
-
-		log.debug("Reset charsets party %s"%(self.id))
-
-		if not self.authorized_charsets:
-			self.authorized_charsets = ""
-			log.debug("Creating charsets for party %s"%(self.id))
-		else:
-			log.debug("Configured charsets : %s"%(self.authorized_charsets))
+		self.rules_msg = ""
 
 		self.authorized_charsets = ""
-		log.debug('Resetting charsets')
-		self.store()
-		return True
-
-		log.debug("Now charsets for %s are %s"%(self.id, self.authorized_charsets))
-
-
-	def setlanguagemsg(self, msg):
-		log.debug("Adding language msg %s to party %s"%(msg, self.id))
-
-		self.language_msg = str(msg)
-		self.store()
+		self.authorized_languages = ""		
+		self.language_msg = ""
+		self.languageredemption_d = 1
+		self.languagewarning_msgid = ""
 
 
-	def refresh(self):
-		log.debug("Refreshing %s party infos"%(self.id))
+class Parties():
 
-		if self.is_partyon():
+	def __init__(self, bot, mainsession):
+		log.debug("Initiating a new set of parties")
 
-			party = self.maindb.get_party(self.id)
+		self.bot = bot
+		self.db_session = mainsession
+		self.parties_ls = []
 
-			log.debug("Reresh party %s : %s"%(self.id, party))
-
-
-			for admin in self.get_partyadmins():
-
-				log.debug("Admin %s "%(admin))
-
-				self.maindb.add_whoiswhere(admin['userId'], self.id, adminstatus=db.PersonAdminStatus.ADMIN)
-
-			'''
-			# Get chat admins
-			if  not 'admins' in party :
-				party['admins'] = {}
-			party['admins'] =  get_partyadmins(bot, self.chatId)
-			# Get chat members
-			if  not 'members' in party :
-				party['members'] = {}
-			party['members'] = get_partymembers(bot, self.chatId)
-			# Get chat blocked users
-			if  not 'blocked' in party :
-				party['blocked'] = {}		
-			party['blocked'] = get_partyblocked(bot, self.chatId)
-			# Get chat pending users
-			if  not 'pending' in party :
-				party['pending'] = {}	
-			party['pending'] = get_partypending(bot, self.	chatId)
-			
-			log.debug("\n\n\n\tparty to store: %s\n\n\n"%(party))
-			#maindb.store_party(chatId, party)
-
-			'''
+		self.parties_ls = self.db_session.query(PartyStorage).all()
+		self.parties_ls.sort(key=operator.attrgetter('id'))
+		log.debug("%d parties are defined"%(len(self.parties_ls)))
 
 
+	def exist(self, cid):
+		log.debug('Parties: testing if a party exists %s'%(cid))
+		for party in self.parties_ls:
+			if cid == party.id:
+				return True
+		log.debug( '%s is not a managed party'%(cid))
+		return False
 
-	
-	def do_redemption(self):
-		log.debug("Doing redemption")
-		pass
+	def get_index(self, cid):
+		log.debug('Parties: gettin party index for %s'%(cid))
+		for party in self.parties_ls:
+			if cid == party.id:
+				return self.parties_ls.index(party)
+		log.debug( '%s is not a managed party'%(cid))
+		return False
 
-	def do_springcleaning(self):
-		log.debug("Doing sprign cleaning")
-		pass
+	def add(self, cid):
+		log.debug('parties: adding party %s'%(cid))
+		if not self.exist(cid):
+			newparty = PartyStorage(cid)
+			self.db_session.add(newparty)
+			self.db_session.commit()
+			self.db_session.flush()
+			self.parties_ls.append(self.db_session.query(PartyStorage).filter(PartyStorage.id == cid).first())
+			self.parties_ls.sort(key=operator.attrgetter('id'))
+			return True
+		log.debug( 'Cannot add an already managed party with cid %s'%(cid))
+		return False
 
-	def do_guestwelcome(self, event):
-		log.debug("Doing guest welcome")
+	def delete(self, cid):
+		log.debug('Parties deleting party %s'%(cid))
+		index = self.get_index(cid)
+		if index is not False:
+			self.db_session.delete(self.parties_ls[index])
+			self.parties_ls.remove(self.parties_ls[index])
+			log.debug( 'Party cid: %s at index %d deleted'%(cid, index))
+			return True
+		log.debug( '%s is not a managed party'%(cid))
+		return False
 
-		if False:
-			if self.is_partyon():
-				bot.send_text(
-					self.chat_id,
-					text=_("Welcome {users}, beware of the channel rules!").format(
-						users=", ".join([u['userId'] for u in event.data['newMembers']])
-					)
-				)
-		return True
-
-	def do_guestgoodbye(self, event):
-		log.debug("Doing guest goodbye")
-
-		if False:
-			if is_partyon():
-				bot.send_text(
-					self.chat_id,
-					text=_("Say goodbye to {users}").format(
-						users=", ".join([u['userId'] for u in event.data['leftMembers']])
-					)
-				)
-		return True
-
-
-	##########################################
-	#
-	# Read channel messages
-	#
-	##########################################
-	def do_keepaneyeon(self):
-		log.debug("Doing keepaneyeon")
-
-		if is_partyon():
-			# bot.send_text(chat_id, text="Message in channel was received, i keep an eye on it")
-			pass
+	# Return the number of managed parties
+	def size(self):
+		log.debug('Parties: returning the number of managed parties')
+		count = len(self.parties_ls)
+		if count is not None and count > 0:
+			log.debug( '%d managed parties found'%count)
+			return count
 		else:
-			#bot.send_text(chat_id, text="Message in channel was received, but i\'m not here")
-			pass
-		
-	
-	def get_partymembers(self, ):
-		log.debug("Get Partymembers")
+			log.debug( 'No managed party in the list')
+			return 0
 
-		resp =  self.bot.get_chat_members(self.id)
+	def get_satus(self, cid):
+		log.debug('returning party  %s status'%(cid))
+		index = self.get_index(cid)
+		if index is not False:
+			return self.parties_ls[index].status
+		else:
+			log.error("%s is not managed"%cid)
+			return False
 
-		if resp.status_code == 200:
-			info = json.loads(resp.text)
-			if info['ok'] == True:
-				print("\n\nget_chat_admins %s\n\n"%(info['members']))
-				return info['members']
+	def set_level(self, cid, status):
+		def levelexists(level):
+			intLevel = int(level)
+			log.debug("Checking if %d level exists in the hierarchie"%intLevel)
+			if intLevel == PartyStatus.ADMIN or intLevel == PartyStatus.VOLUBILE or intLevel == PartyStatus.WATCHING or intLevel == PartyStatus.NONMANAGED:
+				return True
+			else:
+				return False
+		log.debug('setting party  %s status %s'%(cid, status))
+		index = self.get_index(cid)
+		if index is not False:
+			if levelexists(status):
+				setattr(self.parties_ls[index], 'status', int(status))
+				self.db_session.commit()
+				self.db_session.flush()
+				return True
+			else:
+				log.debug('Proposed status does not exist')
+				return False
+		else:
+			log.error("%s is not managed"%cid)
+			return False	
+
+	def get_availablecharsets(self, cid):
+		log.debug("Listin available partycharsets")
+		index = self.get_index(cid)
+		if index is not False:
+			return self.parties_ls[index].alphabets
+		else:
+			log.error("%s is not managed"%cid)
+			return None		
+
+	def add_charset(self, cid, charset):
+		log.debug("Add charsets %s to party %s"%(charset, cid))
+		index = self.get_index(cid)
+		if index is not False:
+			if not self.parties_ls[index].authorized_charsets:
+				self.parties_ls[index].authorized_charsets = ""
+				log.debug("Creating charsets for party %s"%(cid))
+			else:
+				log.debug("Configured charsets : %s"%(self.parties_ls[index].authorized_charsets))
+
+			if charset in self.parties_ls[index].alphabets:
+				log.debug("%s is a known charset, adding it"%charset)
+				charsets = list(self.parties_ls[index].authorized_charsets.split(" "))
+				if charset not in charsets:
+					charsets.append(charset)
+					setattr(self.parties_ls[index], 'authorized_charsets', str(' '.join(charsets)))
+					self.db_session.commit()
+					self.db_session.flush()
+				else:
+					log.debug('nothing to do, already configured')
+				log.debug("Now charsets for %s are %s"%(cid, self.parties_ls[index].authorized_charsets))
+				return True
+			else:
+				log.debug("%s is unknown, can' add it"%charset)
+				return False
+
+	def get_charsets(self, cid):
+		log.debug("gettin charsets from party %s"%(cid))
+		index = self.get_index(cid)
+		if index is not False:
+			log.debug("Return charsets %s for party %s"%(self.parties_ls[index].authorized_charsets, cid))
+			return self.parties_ls[index].authorized_charsets
+		else:
+			log.error("%s is not managed"%cid)
+			return None
+
+	# Reset party charsets to null
+	def reset_charsets(self, cid):
+		log.debug("Reset charsets party %s"%(cid))
+		index = self.get_index(cid)
+		if index is not False:
+			self.parties_ls[index].authorized_charsets = ""
+			self.db_session.commit()
+			self.db_session.flush()
+			log.debug("Now charsets for %s are %s"%(cid, self.parties_ls[index].authorized_charsets))
+		else:
+			log.error("%s is not managed"%cid)
+			return False
+
+	def get_languagemsg(self, cid):
+		log.debug("Gettin language msg for party %s"%(cid))
+		index = self.get_index(cid)
+		if index is not False:
+			return self.parties_ls[index].language_msg
+		else:
+			log.error("%s is not managed"%cid)
+			return None
+
+	def set_languagemsg(self, cid, msg):
+		log.debug("Adding language msg %s to party %s"%(msg, cid))
+		index = self.get_index(cid)
+		if index is not False:
+			setattr(self.parties_ls[index], 'language_msg', str(msg))
+			self.db_session.commit()
+			self.db_session.flush()
+			return True
+		else:
+			log.error("%s is not managed"%cid)
+			return False
+
+
+	def is_managed(self, cid):
+		log.debug("Returnin if we are managin in the party %s"%(cid))
+		index = self.get_index(cid)
+		if index is not False:
+			if self.parties_ls[index].status >= PartyStatus.VOLUBILE:
+				return True
 			else:
 				return False
 		else:
+			log.error("%s is not managed"%cid)
 			return False
 
-	
-	def get_partyadmins(self):
-		log.debug("Get Admins")
-
-		resp =  self.bot.get_chat_admins(self.id)
-		if resp.status_code == 200:
-			info = json.loads(resp.text)
-
-			if info['ok'] == True:
-
-				print("\n\nget_chat_admins %s\n\n"%(info))
-				return info['admins']
+	def is_admin(self, cid):
+		log.debug("Returnin if we are admin in the party %s"%(cid))
+		index = self.get_index(cid)
+		if index is not False:
+			if self.parties_ls[index].status >= PartyStatus.ADMIN:
+				return True
 			else:
 				return False
 		else:
+			log.error("%s is not managed"%cid)
 			return False
 
-	
-	def get_partyblocked(self):
+	def list(self):
+		log.debug("Returnin the list of managed parties")
+		return_value_ls = []
+		for party in self.parties_ls:
+			return_value_ls.append({"id": party.id, "status": PartyStatus(party.status).name})
 
-		log.debug("Get Blocked people")
+		log.debug("returning dict %s"%return_value_ls)
+		return return_value_ls
 
-		resp =  self.bot.get_chat_blocked_users(self.id)
-		if resp.status_code == 200:
-			info = json.loads(resp.text)
-			if info['ok'] == True:
-				print("\n\nget_chat_blocked %s\n\n"%(info))
-				return info['users']
-			else:
-				return False
+
+
+	def get_languagewarnmsgid(self, cid):
+		log.debug("Gettin language warnign msg for party %s"%(cid))
+		index = self.get_index(cid)
+		if index is not False:
+			return self.parties_ls[index].languagewarning_msgid
 		else:
-			return False
+			log.error("%s is not managed"%cid)
+			return None
 
-	
-	def get_partypending(self):
-
-		log.debug("Get Pending people")
-
-		resp =  self.bot.get_chat_pending_users(self.id)
-		if resp.status_code == 200:
-			info = json.loads(resp.text)
-			if info['ok'] == True:
-				print("\n\nget_chat_pending %s\n\n"%(info))
-				return info['users']
-			else:
-				return False
+	def set_languagewarnmsgid(self, cid, msgid):
+		log.debug("Adding language warning msgid %s to party %s"%(msgid, cid))
+		index = self.get_index(cid)
+		if index is not False:
+			setattr(self.parties_ls[index], 'languagewarning_msgid', str(msgid))
+			self.db_session.commit()
+			self.db_session.flush()
+			return True
 		else:
+			log.error("%s is not managed"%cid)
 			return False
-
-		pass
-
-	def get_availablecharsets(self):
-		log.debug("List  partycharsets")
-
-
-		return self.alphabets
-
-
-	def list_partycharsets(self):
-		log.debug("List party charsets on %s"%(self.id))
-
-		party = db.get_party(self.id)
-
-		log.debug("Return charsets %s for party %s"%(self.authorized_charsets, self.id))
-		return self.authorized_charsets
-
-
-
-
-
 

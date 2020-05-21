@@ -18,7 +18,10 @@ import paquebot_db as db
 import paquebot_party as party
 import paquebot_crew as crew
 
-from paquebot_db import CrewGrades as grades
+from paquebot_crew import CrewGrades as grades
+from paquebot_whoiswhere import Whoiswhere as wiw
+from paquebot_party import Parties as parties
+
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +31,8 @@ log = logging.getLogger(__name__)
 # Rebot commands
 #
 ##########################################
+
+
 
 class ReceivedCommand(object):
 
@@ -40,7 +45,7 @@ class ReceivedCommand(object):
 	about_id = ""	# target uin or cid for the command
 	target_value = ""	# optional value for the command
 
-	def __init__(self, command, event):
+	def __init__(self, command, aboutarg, event):
 
 		log.debug("New command received")			
 
@@ -80,14 +85,21 @@ class ReceivedCommand(object):
 				log.debug('msgID-text : %s'%(event.data["text"]))
 
 				self.command 		= event.data["text"].split()[0] if len(event.data["text"].split()) > 0  else ""
-				self.about_id		= event.data["text"].split()[1] if len(event.data["text"].split()) > 1  else ""
+				if aboutarg == True:
+					self.about_id		= event.data["text"].split()[1] if len(event.data["text"].split()) > 1  else ""
+					# Target value --> the rest of the line
+					self.target_value 	= event.data["text"].replace(self.command, '').replace(self.about_id, '').strip()
 
-				# Target value --> the rest of the line
-				self.target_value 	= event.data["text"].replace(self.command, '').replace(self.about_id, '').strip()
+				else:
+					self.about_id		= ""
+					# Target value --> the rest of the line
+					self.target_value 	= event.data["text"].replace(self.command, '').strip()
+
+
 
 				# self.target_value	= event.data["text"].split()[2] if len(event.data["text"].split()) > 2  else ""
 
-				log.debug('Command : %s about: %s with target %s'%(self.command, self.about_id, self.target_value))
+				log.debug('Command : %s about: %s with target: %s'%(self.command, self.about_id, self.target_value))
 
 
 			elif event.data["chat"]["type"] == "private":
@@ -200,25 +212,20 @@ class ReceivedCommand(object):
 			self.place = "error"
 
 
-
-def acceptcommand(bot, event, crew, order, grade):
+def accept_command(bot, event, crew, order, aboutarg, grade):
 
 	log.debug('Accepting command %s'%order)
 
-	command = ReceivedCommand(order, event)
+	command = ReceivedCommand(order, aboutarg, event)
 	
 	if command.place != 'error':
 		# Should be a member to accept the command
 		if crew.is_member(command.from_uid):
 			# Deleting request (to clean the room)
-			if command.place == "group":
+			if command.place == "group" and bot.parties.is_managed(command.cid):
 				# Deleting requests (to clean the room)
 				log.debug("Deleting order msg %s in %s"%(command.mid, command.cid))
 				bot.delete_messages(command.cid, command.mid)
-
-			'''
-			  test grade
-			'''
 			return command
 		else:
 			log.debug("cant accept, command from a non crew member")
@@ -232,10 +239,10 @@ def acceptcommand(bot, event, crew, order, grade):
 # Join a party (i.e. start managing it)
 # Captain level and above
 
-def joinparty(bot, event):
+def join_party(bot, event):
 
 	crew = bot.get_crew()
-	command = acceptcommand(bot, event, crew, 'joinparty', grades.CAPTAIN)
+	command = accept_command(bot, event, crew, 'join_party', aboutarg=False, grade=grades.CAPTAIN)
 
 	if command is not None:
 
@@ -244,10 +251,8 @@ def joinparty(bot, event):
 
 		log.debug('Addiing channel %s to the parties'%(command.cid))
 
-
-		if not db.is_party(bot.maindb, command.cid):
-			wp = party.Party(bot, bot.maindb, command.cid)
-			wp.store()
+		if not bot.parties.exist(command.cid):
+			bot.parties.add(command.cid)
 			bot.send_text(chat_id=command.from_uid, text=_("Party @[%s] is added"%(command.cid)))
 			return True
 		else:
@@ -261,23 +266,21 @@ def joinparty(bot, event):
 '''
  List (in private) all managed parties
 '''
-def listparties(bot, event):
+def list_parties(bot, event):
 
 	crew = bot.get_crew()
-	command = acceptcommand(bot, event, crew, 'listparties', grades.BARTENDER)
+	command = accept_command(bot, event, crew, 'list_parties', aboutarg=False, grade=grades.BARTENDER)
 
 	if command is not None:
 		log.debug('%s asked ask to list stored parties'%(command.from_uid))
 
-		if db.size_parties(bot.maindb) > 0:	
-			log.debug("Returning the %d stored parties"%db.size_parties(bot.maindb))
-			for party in db.list_parties(bot.maindb):
-				bot.send_text(chat_id=command.from_uid, text=_("Party @[%s] is managed with level %s"%(party.id, party.status)))
+		if bot.parties.size() > 0:	
+			log.debug("Returning the %d stored parties"%bot.parties.size())
+			for party in bot.parties.list():
+				bot.send_text(chat_id=command.from_uid, text=_("Party @[%s] is managed with level %s"%(party["id"], party["status"])))
 		else:
 			bot.send_text(chat_id=command.from_uid, text=_("No party is managed"))
 			log.debug("Currently, no party stored")
-
-
 	else:
 		log.debug('Cant list, command is none')
 		return False
@@ -285,59 +288,14 @@ def listparties(bot, event):
 
 
 
-'''
-	Starting hte bot (i.e. enabling bot behavior)
-'''
-
-def start(bot, event):
-
-	crew = bot.get_crew()
-	command = acceptcommand(bot, event, crew, 'start', grades.SECOND)
-
-	if command is not None:
-		if command.cid == "":
-			command.cid = command.about_id
-
-		log.debug('%s asked start the bot'%(command.from_uid))
-
-		if crew.is_director(command.from_uid):
-			bot.send_text(chat_id=command.from_uid,
-				  text="Hello there.. What do you want to do ?",
-				  inline_keyboard_markup="[{}]".format(json.dumps([
-					  {"text": "Start/stop the bot", "callbackData": "startstop_bot %s"%(command.cid)},
-					  {"text": "Manage the party bot interaction level", "callbackData": "setpartyinteraction %s"%(command.cid)}
-				  ])))
-
-		# Requester level is sufficient --> adding channel as a party
-		elif crew.is_second(command.from_uid):
-			bot.send_text(chat_id=command.from_uid,
-				  text="Hello there.. What do you want to do ?",
-				  inline_keyboard_markup="[{}]".format(json.dumps([
-					  {"text": "Manage the party bot interaction level", "callbackData": "setpartyinteraction"}
-				  ])))
 
 '''
  Globally stop or start the bot
 '''
-
-def startstopbot(bot, event):
-	log.debug('Command startstop_bot')
-	crew = bot.get_crew()
-	command = acceptcommand(bot, event, crew, 'startstop_bot', grades.DIRECTOR)
-
-	if command is not None:
-		pass
-	else:
-		pass
-
-
-'''
- Globally stop or start the bot
-'''
-def setpartyinteraction(bot, event):
+def set_partyinteraction(bot, event):
 	log.debug('Command set_partyinteraction')
 	crew = bot.get_crew()
-	command = acceptcommand(bot, event, crew, 'setpartyinteraction', grades.SECOND)
+	command = accept_command(bot, event, crew, 'setpartyinteraction', aboutarg=False, grade=grades.SECOND)
 
 	if command is not None:
 		if command.cid == "":
@@ -346,37 +304,36 @@ def setpartyinteraction(bot, event):
 		bot.send_text(chat_id=command.from_uid,
 			  text="Bot in @[%s] should be : "%(command.cid),
 			  inline_keyboard_markup="[{}]".format(json.dumps([
-				  {"text": "Admin", "callbackData": "setbotinpartylevel %s %d"%(command.cid, db.PartyStatus.ADMIN)},
-					  {"text": "Volubile", "callbackData": "setbotinpartylevel %s %d"%(command.cid, db.PartyStatus.VOLUBILE)},
-					  {"text": "Watcher", "callbackData": "setbotinpartylevel %s %d"%(command.cid, db.PartyStatus.WATCHING)},
-					  {"text": "Nothing", "callbackData": "setbotinpartylevel %s %d"%(command.cid, db.PartyStatus.NONMANAGED)}
+				  {"text": "Admin", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.ADMIN)},
+					  {"text": "Volubile", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.VOLUBILE)},
+					  {"text": "Watcher", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.WATCHING)},
+					  {"text": "Nothing", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.NONMANAGED)}
 			  ])))
 
-def setbotinpartylevel(bot, event):
+def set_botinpartylevel(bot, event):
 
-	log.debug('Command setbotinpartylevel')
+	log.debug('Command set_botinpartylevel')
 
 	crew = bot.get_crew()
-	command = acceptcommand(bot, event, crew, 'setbotinpartylevel', grades.SECOND)
+	command = accept_command(bot, event, crew, 'setbotinpartylevel', aboutarg=True, grade=grades.SECOND)
 
 	if command is not None:
 		if command.cid == "":
 			command.cid = command.about_id
 
-		wp = party.Party(bot, bot.maindb, command.cid)
-		return wp.setlevel(command.target_value)
+		return bot.parties.set_level(command.cid, command.target_value)
 	else:
 		log.debug("Command is None")
 
 
-def buttonsanswer(bot, event):
+def answer_buttons(bot, event):
 
 	log.debug('Receiving a button answer')
 
 	if event.data['callbackData'].startswith("setpartyinteraction"):
 		log.debug('Button party interaction')
 
-		setpartyinteraction(bot, event)
+		set_partyinteraction(bot, event)
 
 
 	elif event.data['callbackData'].startswith("startstopbot"):
@@ -392,22 +349,25 @@ def buttonsanswer(bot, event):
 	elif event.data['callbackData'].startswith("setbotinpartylevel"):
 		log.debug('Set bot party level')
 
-		setbotinpartylevel(bot, event)
+		set_botinpartylevel(bot, event)
 
-	elif event.data['callbackData'].startswith("setcharset"):
-		log.debug('Button setcharset')
+	elif event.data['callbackData'].startswith("addpartycharset"):
+		log.debug('Button addpartycharset')
 
-		addpartycharset(bot, event)
+		add_partycharset(bot, event)
 
 	elif event.data['callbackData'].startswith("resetpartycharsets"):
-		log.debug('Button setcharset')
+		log.debug('Button resetpartycharsets')
 
-		resetpartycharsets(bot, event)
+		reset_partycharsets(bot, event)
 
 	elif event.data['callbackData'].startswith("setpartycharsets"):
-		log.debug('Button setcharset')
+		log.debug('Button setpartycharsets')
+		set_partycharsets(bot, event)
 
-		setpartycharsets(bot, event)
+	elif event.data['callbackData'].startswith("addcrewmemberwithrank"):
+		log.debug('Button addcrewmemberwithrank')
+		add_crewmemberwithrank(bot, event)
 
 	else:
 		log.debug('Button unknown : %s'%(event.data['callbackData']))
@@ -419,23 +379,24 @@ def buttonsanswer(bot, event):
 # CAPTAIN at least
 #
 ############################
-def setpartycharsets(bot, event):
+def set_partycharsets(bot, event):
 
 	crew = bot.get_crew()
-	command = acceptcommand(bot, event, crew, 'setpartycharsets', grades.SECOND)
+	command = accept_command(bot, event, crew, 'set_partycharsets', aboutarg=False,  grade=grades.SECOND)
 
 	if command is not None:
 
 		if command.cid == "":
 			command.cid = command.about_id
 
-		wp = party.Party(bot, bot.maindb, command.cid)
+		if not bot.parties.exist(command.cid):
+			bot.send_text(chat_id=command.from_uid, text="Unmanaged party @[%s], try to add it"%(command.cid))
+			return False
 
 		log.debug('Setting party charsets on party %s'%command.cid)
+		alphabet_lst = list(bot.parties.get_availablecharsets(command.cid))
 
 		markup = []
-		alphabet_lst = list(wp.alphabets)
-
 		bot.send_text(chat_id=command.from_uid,
 			text="You may reset charsets configuration for @[%s]"%(command.cid),
 			inline_keyboard_markup="[{}]".format(json.dumps([{"text": "RESET", "callbackData": "resetpartycharsets %s"%(command.cid)}])))
@@ -493,9 +454,7 @@ def setpartycharsets(bot, event):
 					text="[... at last ...]",
 					inline_keyboard_markup="[{}]".format(json.dumps(markup)))
 
-	else:
-		bot.send_text(chat_id=command.from_uid, text="Unmanaged party @[%s], try to add it"%(command.cid))
-		return False
+
 
 
 
@@ -505,11 +464,10 @@ def setpartycharsets(bot, event):
 # CAPTAIN at least
 #
 ############################
-def addpartycharset(bot, event):
-
+def add_partycharset(bot, event):
 
 	crew = bot.get_crew()
-	command = acceptcommand(bot, event, crew, 'setpartycharsets', grades.CAPTAIN)
+	command = accept_command(bot, event, crew, 'add_partycharset', aboutarg=True, grade=grades.CAPTAIN)
 
 	if command is not None:
 
@@ -518,10 +476,9 @@ def addpartycharset(bot, event):
 
 		log.debug("%s ask to add charset %s to %s"%(command.from_uid, command.target_value, command.cid))
 
-		wp = party.Party(bot, bot.maindb, command.cid)
-		if wp.addcharset(command.target_value):
+		if bot.parties.add_charset(command.cid, command.target_value):
 			bot.send_text(chat_id=command.from_uid, text=_("@[%s] is now configured with the following charsets"%command.cid))
-			bot.send_text(chat_id=command.from_uid, text=_("%s"%str(wp.authorized_charsets)))
+			bot.send_text(chat_id=command.from_uid, text=_("%s"%str(bot.parties.get_charsets(command.cid))))
 			return True
 		else:
 			bot.send_text(chat_id=command.from_uid, text=_("Unrecoverable error"))
@@ -536,11 +493,10 @@ def addpartycharset(bot, event):
 # CAPTAIN at least
 #
 ############################
-def resetpartycharsets(bot, event):
-
+def reset_partycharsets(bot, event):
 
 	crew = bot.get_crew()
-	command = acceptcommand(bot, event, crew, 'resetpartycharsets', grades.CAPTAIN)
+	command = accept_command(bot, event, crew, 'resetpartycharsets', aboutarg=False, grade=grades.CAPTAIN)
 
 	if command is not None:
 
@@ -549,14 +505,18 @@ def resetpartycharsets(bot, event):
 
 		log.debug("%s ask to reset charset to %s"%(command.from_uid, command.cid))
 
-		wp = party.Party(bot, bot.maindb, command.cid)
-		if wp.resetcharset():
-			bot.send_text(chat_id=command.from_uid, text=_("@[%s] is now configured with the following charsets"%command.cid))
-			bot.send_text(chat_id=command.from_uid, text=_("charsets %s"%str(wp.authorized_charsets)))
-			return True
+		if bot.parties.exist(command.cid):
+			if bot.parties.reset_charsets(command.cid):
+				bot.send_text(chat_id=command.from_uid, text=_("@[%s] is now configured with the following charsets"%command.cid))
+				bot.send_text(chat_id=command.from_uid, text=_("%s"%str(bot.parties.get_charsets(command.cid))))
+				return True
+			else:
+				bot.send_text(chat_id=command.from_uid, text=_("Unrecoverable error"))
+				return False
 		else:
-			bot.send_text(chat_id=command.from_uid, text=_("Unrecoverable error"))
+			bot.send_text(chat_id=command.from_uid, text="Unmanaged party @[%s]"%(command.cid))
 			return False
+
 	else:
 		log.debug("Command is None")
 		return False
@@ -572,7 +532,7 @@ def list_partycharsets(bot, event):
 
 
 	crew = bot.get_crew()
-	command = acceptcommand(bot, event, crew, 'list_partycharsets', grades.SEAMAN)
+	command = accept_command(bot, event, crew, 'list_partycharsets', aboutarg=False,grade=grades.SEAMAN)
 
 	if command is not None:
 
@@ -580,25 +540,22 @@ def list_partycharsets(bot, event):
 			command.cid = command.about_id
 
 		log.debug('Listing party charsets on %s '%command.cid)
+		log.debug("%s ask to list parties on %s"%(command.from_uid, command.cid))
 
-		if command.cid != "":
-			log.debug("%s ask to list parties on %s"%(command.from_uid, command.cid))
-
-			wp = party.Party(bot, bot.maindb, command.cid)
-			if wp is not None:
-				bot.send_text(chat_id=command.from_uid, text=_("@[%s] is configured with the following charsets"%command.cid))
-				bot.send_text(chat_id=command.from_uid, text=_("%s"%str(wp.authorized_charsets)))
-				bot.send_text(chat_id=command.from_uid,
-					text="You may change it with /setpartycharsets",
-					inline_keyboard_markup="[{}]".format(json.dumps([{"text": "/setpartycharsets", "callbackData": "setpartycharsets %s"%(command.cid)}])))
-
-				return True
-
+		if bot.parties.exist(command.cid):
+			bot.send_text(chat_id=command.from_uid,
+				text=_("@[%s] is configured with the following charsets"%command.cid))
+			bot.send_text(chat_id=command.from_uid,
+				text=_("%s"%str(bot.parties.get_charsets(command.cid))))
+			bot.send_text(chat_id=command.from_uid,
+				text="You may change it with /setpartycharsets",
+				inline_keyboard_markup="[{}]".format(json.dumps([{"text": "/setpartycharsets", "callbackData": "setpartycharsets %s"%(command.cid)}])))
+			return True
 		else:
-			log.debug(" something is missing")
+			bot.send_text(chat_id=command.from_uid, text="Unmanaged party @[%s]"%(command.cid))
 			return False
 	else:
-		bot.send_text(chat_id=command.from_uid, text="Unmanaged party @[%s]"%(command.cid))
+		log.debug("Command is None")
 		return False
 
 
@@ -607,7 +564,8 @@ def list_partycharsets(bot, event):
 def help(bot, event):
 
 	crew = bot.get_crew()
-	command = ReceivedCommand('help', event)
+	command = accept_command(bot, event, crew, 'help', aboutarg=False, grade=grades.SEAMAN)
+
 	if crew.is_member(command.from_uid):
 		if command.place == "group":
 			# Deleting requests (to clean the room)
@@ -623,6 +581,19 @@ def help(bot, event):
 
 		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("Hello there"))
 		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("Do you need some help?"))
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("(!) You have to invite the bot in your room 1st"))
+
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/joinparty - adding a room to the managed room"))
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/listparties - list managed rooms"))	
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/setpartylevel - set bot interaction level"))
+
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/listcrew - List the bot crew"))
+
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/setpartycharsets - set allowed charsets in a room"))
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/listpartycharsets - list allowed charsets in a room"))	
+	
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/setlanguagemsg - customize warning msg for unauthorized language"))
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/getlanguagemsg - display language warning msg"))
 
 	else:
 		return False
@@ -632,9 +603,9 @@ def help(bot, event):
   set language message
 '''
 
-def setlanguagemsg(bot, event):
+def set_languagemsg(bot, event):
 	crew = bot.get_crew()
-	command = acceptcommand(bot, event, crew, 'setlanguagemsg', grades.SECOND)
+	command = accept_command(bot, event, crew, 'set_languagemsg', aboutarg=False, grade=grades.SECOND)
 
 	if command is not None:
 
@@ -643,20 +614,126 @@ def setlanguagemsg(bot, event):
 
 		log.debug('Setting language msg %s on %s'%(command.target_value, command.cid))
 
-		if command.cid != "":
 
-			languagemsg	= event.data["text"].split(" ", )[2] if len(event.data["text"].split()) > 2  else ""
-			wp = party.Party(bot, bot.maindb, command.cid)
-			if wp is not None:
-				wp.setlanguagemsg(command.target_value)
-				bot.send_text(chat_id=command.from_uid, text=_("@[%s] is now configured with the following language msg : %s"%(command.cid, command.target_value)))
-				return True			
+		if bot.parties.exist(command.cid):
+
+			languagemsg	= command.target_value
+			if bot.parties.set_languagemsg(command.cid, languagemsg):
+				bot.send_text(chat_id=command.from_uid, text=_("@[%s] is now configured with the following language msg : %s"%(command.cid, bot.parties.get_languagemsg(command.cid))))
+				return True
+			else:
+				bot.send_text(chat_id=command.from_uid, text=_("Unrecoverable error"))
+				return False
+		else:
+			bot.send_text(chat_id=command.from_uid, text="Unmanaged party @[%s]"%(command.cid))
+			return False
+	else:
+		log.debug("Command is None")
+		return False
+
+
+def get_languagemsg(bot, event):
+	crew = bot.get_crew()
+	command = accept_command(bot, event, crew, 'set_languagemsg', aboutarg=False, grade=grades.SECOND)
+
+	if command is not None:
+
+		if command.cid == "":
+			command.cid = command.about_id
+
+		log.debug('Gettin language msg %s on %s'%(command.target_value, command.cid))
+
+		if bot.parties.exist(command.cid):
+			bot.send_text(chat_id=command.from_uid, text=_("@[%s] is configured with the following language msg : %s"%(command.cid, bot.parties.get_languagemsg(command.cid))))
+			return True
+		else:
+			bot.send_text(chat_id=command.from_uid, text="Unmanaged party @[%s]"%(command.cid))
+			return False
+	else:
+		log.debug("Command is None")
+		return False		
+
+def list_crewmembers(bot, event):
+	crew = bot.get_crew()
+	command = accept_command(bot, event, crew, 'listcrewmembers', aboutarg=False, grade=grades.SEAMAN)	
+
+	if command is not None:
+
+		if command.cid == "":
+			command.cid = command.about_id
+
+		log.debug('Listing crew members')
+
+		if bot.crew.size() > 0:	
+			log.debug("Returning the %d stored crew members"%bot.crew.size())
+			for crewmember in bot.crew.list():
+				bot.send_text(chat_id=command.from_uid, text=_("Crewman @[%s] has %s rank"%(crewmember["id"], crewmember["grade"])))
+		else:
+			bot.send_text(chat_id=command.from_uid, text=_("Empty crew, do something"))
+			log.debug("Currently, Empty crew")
 
 
 
-def test_cb(bot, event):
-	if False:
-		bot.send_text(chat_id=event.data['chat']['chatId'], text="User command: {}".format(event.data['text']))
+def add_crewmember(bot, event):
+	crew = bot.get_crew()
+	command = accept_command(bot, event, crew, 'addcrewmember', aboutarg=True, grade=grades.DIRECTOR)	
+
+	if command is not None:
+
+		target_uid= command.about_id.replace('@[', '').replace(']', '').strip()
+		log.debug("%s ask to add crewmmeber %s "%(command.from_uid, target_uid))
+
+
+		if target_uid is not None:
+			log.debug('Adding a crew member')
+			bot.send_text(chat_id=command.from_uid,
+				text="You may add @[%s] at the following rank"%(target_uid))
+
+			for grade in grades:
+				if grade.value < grades(crew.get_grade(command.from_uid)).value:
+					bot.send_text(chat_id=command.from_uid,
+					text="%s"%(grade.name),
+					inline_keyboard_markup="[{}]".format(json.dumps([{"text": "%s"%grade.name, "callbackData": "addcrewmemberwithrank %s %s"%(target_uid, grade.value)}])))
+	else:
+		log.debug("Command is None")
+		return False
+
+def add_crewmemberwithrank(bot, event):
+	crew = bot.get_crew()
+	command = accept_command(bot, event, crew, 'addcrewmemberwithrank', aboutarg=True, grade=grades.DIRECTOR)	
+
+	if command is not None:
+
+		log.debug("%s ask to add crewmmeber %s with a rank %s"%(command.from_uid, command.about_id, command.target_value))
+		if int(command.target_value) < int(grades(crew.get_grade(command.from_uid)).value):
+			crew.add(command.about_id, "", int(command.target_value))
+		else:
+			bot.send_text(chat_id=command.from_uid, text=_("Your rank is not sufficient"))
+			log.debug("Unsufficient rank for the desired promotion")				
+			
+	else:
+		log.debug("Command is None")
+		return False
+
+def del_crewmember(bot, event):
+	crew = bot.get_crew()
+	command = accept_command(bot, event, crew, 'addcrewmember', aboutarg=True, grade=grades.DIRECTOR)	
+
+	if command is not None:
+
+		target_uid= command.about_id.replace('@[', '').replace(']', '').strip()
+		log.debug("%s ask to delete crewmmeber %s "%(command.from_uid, target_uid))
+
+		if target_uid != "":
+			if bot.crew.delete(target_uid):	
+				bot.send_text(chat_id=command.from_uid, text=_("Crewman @[%s] is now deleted"%(target_uid)))
+			else:
+				bot.send_text(chat_id=command.from_uid, text=_("Deletin @[%s], something bad happen"%(target_uid)))
+				log.debug("Something bad happen crew deletin user")
+
+	else:
+		log.debug("Command is None")
+		return False
 
 
 def do_guestwelcome(bot, event):
@@ -956,6 +1033,52 @@ def list_charsets(bot, event):
 		bot.send_text(chat_id=event.data['chat']['chatId'], text="\t%s"%(charset))
 	return True
 '''
+
+
+'''
+	Starting hte bot (i.e. enabling bot behavior)
+'''
+
+def start(bot, event):
+
+	crew = bot.get_crew()
+	command = accept_command(bot, event, crew, 'start', aboutarg=False, grade=grades.SECOND)
+
+	if command is not None:
+		if command.cid == "":
+			command.cid = command.about_id
+
+		log.debug('%s asked start the bot'%(command.from_uid))
+
+		if crew.is_director(command.from_uid):
+			bot.send_text(chat_id=command.from_uid,
+				  text="Hello there.. What do you want to do ?",
+				  inline_keyboard_markup="[{}]".format(json.dumps([
+					  {"text": "Start/stop the bot", "callbackData": "startstop_bot %s"%(command.cid)},
+					  {"text": "Manage the party bot interaction level", "callbackData": "set_partyinteraction %s"%(command.cid)}
+				  ])))
+
+		# Requester level is sufficient --> adding channel as a party
+		elif crew.is_second(command.from_uid):
+			bot.send_text(chat_id=command.from_uid,
+				  text="Hello there.. What do you want to do ?",
+				  inline_keyboard_markup="[{}]".format(json.dumps([
+					  {"text": "Manage the party bot interaction level", "callbackData": "set_partyinteraction"}
+				  ])))
+
+'''
+ Globally stop or start the bot
+'''
+
+def startstopbot(bot, event):
+	log.debug('Command startstop_bot')
+	crew = bot.get_crew()
+	command = accept_command(bot, event, crew, 'startstop_bot', aboutarg=False, grade=grades.DIRECTOR)
+
+	if command is not None:
+		pass
+	else:
+		pass
 
 
 

@@ -16,11 +16,49 @@ _ = gettext.gettext
 import paquebot_bot
 import paquebot_db as db
 import paquebot_party as party
-
+from paquebot_party import Parties as parties
+from paquebot_party import PartyStatus as partystatus
+from paquebot_crew import CrewGrades as grades
+from paquebot_whoiswhere import Whoiswhere as wiw
 
 log = logging.getLogger(__name__)
 
-def watchtxt(bot, event):
+
+# From https://hackersandslackers.com/extract-data-from-complex-json-python/
+def extract_values(obj, key2extract):
+	"""Recursively pull values of specified key from nested JSON."""
+	log.debug("Entering extract_values with key %s on obj %s"%(key2extract, obj))
+
+	arr = []
+
+	def extract(obj, arr, key2extract):
+		"""Return all matching values in an object."""
+		if isinstance(obj, dict):
+			log.debug("object is dict with items: %s"%obj.items())
+			for key, value in obj.items():
+				if isinstance(value, (dict, list)):
+					log.debug("extracing %s with key %s"%(key, key2extract))
+					extract(value, arr, key2extract)
+				elif key == key2extract:
+					log.debug("appending value %s to the response"%(value))
+					arr.append(value)
+		elif isinstance(obj, list):
+			log.debug("object is list with items: %s"%obj)
+			for item in obj:
+				log.debug("extracing %s with key %s"%(arr, key2extract))
+				extract(item, arr, key2extract)
+		else:
+			log.debug("obj is not list nor dict")
+
+		return arr
+
+	results = extract(obj, arr, key2extract)
+	return results
+
+
+
+
+def watch_txt(bot, event):
 
 	ad = AlphabetDetector()
 	'''
@@ -51,37 +89,53 @@ def watchtxt(bot, event):
 	cid = event.data["chat"]["chatId"]
 	mid = event.data["msgId"]
 	from_uid = event.data["from"]["userId"]
-	txt = event.data["text"]
 
 	log.debug('Parsing msg %s from %s in %s'%(mid, from_uid, cid))
-
 	crew = bot.get_crew()
-	if  db.is_party(bot.maindb, cid):
-		wp = party.Party(bot, bot.maindb, cid)
+	print("Bot parties: %s %s"%(type(bot.parties),str(bot.parties)))
+	if bot.parties.is_managed(cid):
+		log.debug('Authorized charsets in @[%s]: %s'%(cid, str(bot.parties.get_charsets(cid))))
 
-		log.debug('Authorized charsets in @[%s]: %s'%(cid, str(wp.authorized_charsets)))
+		if bot.parties.get_charsets(cid) is not None and str(bot.parties.get_charsets(cid)) != "":
+			for charset in list(str(bot.parties.get_charsets(cid)).split(" ")):
+				if charset != "":
+					# txt = event.data["text"]
+					# May be multiple text (in case of forwards)
+					texts = extract_values(event.data, "text")
 
-		for charset in list(wp.authorized_charsets.split(" ")):
-			if charset != "":
-				log.debug('Testinng charset %s on %s'%(charset, txt))
-				if ad.only_alphabet_chars(txt, charset):
-					log.debug('text is okay')
-				else:
-					log.debug('text is not authorized')
-					bot.send_text(chat_id=cid, text=_("@[%s] language not authorized"%(from_uid)))
+					log.debug('Testinng charset %s on %s'%(charset, texts))
+					for txt in texts:
+						if ad.only_alphabet_chars(txt, charset):
+							log.debug('text is okay')
+						else:
+							log.debug('text is not authorized')
+							
+							# Removing old message in the room
+							oldwarning_msgid = bot.parties.get_languagewarnmsgid(cid)
+							if oldwarning_msgid != "":
+								log.debug('Removing old warning msg')
+								bot.delete_messages(cid, oldwarning_msgid)
+
+							if bot.parties.get_languagemsg(cid) == "":
+								warning_msgid = bot.send_text(chat_id=cid, text=_("@[%s] language not authorized"%(from_uid))).json()['msgId']
+							else:
+								warning_msgid = bot.send_text(chat_id=cid, text=("%s"%bot.parties.get_languagemsg(cid).format(uid="@[%s]"%from_uid, channelid="@[%s]"%cid, msgid="%s"%mid))).json()['msgId']
+
+							# Storing warning msgid
+							bot.parties.set_languagewarnmsgid(cid, warning_msgid)
 
 
 
 
-	'''
-	# Detecting alphabets
-	ad.only_alphabet_chars(u"ελληνικά means greek", "LATIN") #False
-	ad.only_alphabet_chars(u"ελληνικά", "GREEK") #True
-	ad.only_alphabet_chars(u'سماوي يدور', 'ARABIC') #True
-	ad.only_alphabet_chars(u'שלום', 'HEBREW') #True
-	ad.only_alphabet_chars(u"frappé", "LATIN") #True
-	ad.only_alphabet_chars(u"hôtel lœwe 67", "LATIN") #True
-	ad.only_alphabet_chars(u"det forårsaker første", "LATIN") #True
-	ad.only_alphabet_chars(u"Cyrillic and кириллический", "LATIN") #False
-	ad.only_alphabet_chars(u"кириллический", "CYRILLIC") #True
-	'''
+							if bot.parties.is_admin(cid):
+
+								# Removing incorrect msg 
+								bot.delete_messages(cid, mid)
+
+								'''
+								# Muting the user if he crossed the boundaries
+								wiw.mute(from_uid, cid):
+															log.debug('Muting user')
+								pass
+								'''
+
