@@ -1,17 +1,19 @@
+import json, re
+import threading
+
+
 from bot.bot import Bot, LoggingHTTPAdapter, BotLoggingHTTPAdapter, FileNotFoundException, SkipDuplicateMessageHandler
 from bot.filter import Filter
 from bot.handler import UnknownCommandHandler, MessageHandler, FeedbackCommandHandler, \
 	CommandHandler, NewChatMembersHandler, LeftChatMembersHandler, PinnedMessageHandler, UnPinnedMessageHandler, \
 	EditedMessageHandler, DeletedMessageHandler, StartCommandHandler, BotButtonCommandHandler
+from bot.util import signal_name_by_code
+from bot.event import Event, EventType
+from bot.dispatcher import Dispatcher, StopDispatching
+
 
 from threading import Thread, Lock
 from expiringdict import ExpiringDict
-
-from bot.dispatcher import Dispatcher, StopDispatching
-from bot.event import Event, EventType
-from bot.filter import Filter
-from bot.handler import MessageHandler
-from bot.util import signal_name_by_code
 
 import logging
 import logging.config
@@ -24,6 +26,7 @@ import paquebot_marinegunner as gunner
 from paquebot_crew import CrewGrades as grades
 from paquebot_whoiswhere import Whoiswhere as wiw
 from paquebot_party import Parties as parties
+import paquebot_report as report
 
 
 log = logging.getLogger(__name__)
@@ -68,6 +71,19 @@ class PaqueBot(Bot):
 
 		self.parties = parties(self, maindb.paquebot_db)
 
+
+		resp = self.self_get()
+		if resp.status_code == 200:
+			myselfinfo = json.loads(resp.text)
+			if 'nick' in myselfinfo:
+				self.nick = myselfinfo['nick']
+			else:
+				self.nick = "unknown"
+		else:
+			self.log.error('Unable to retrive my own infos')
+
+			sys.exit(1)
+		self.log.debug('Bot is alive, my ID is %s and my nickname is %s'%(self.uin, self.nick))
 
 
 		'''
@@ -126,6 +142,8 @@ class PaqueBot(Bot):
 		self.dispatcher.add_handler(CommandHandler(command="getlanguagemsg", callback=command.get_languagemsg))
 
 
+		self.dispatcher.add_handler(CommandHandler(command="getinfo", callback=command.get_info))
+
 
 		# List allowed charsets in a party
 		self.dispatcher.add_handler(CommandHandler(command="listcrew", callback=command.list_crewmembers))
@@ -134,6 +152,13 @@ class PaqueBot(Bot):
 
 
 
+		# Spring cleaning
+		self.dispatcher.add_handler(CommandHandler(command="springcleaning", callback=command.do_springcleaning))
+
+
+		# Export/Import
+		self.dispatcher.add_handler(CommandHandler(command="exportdb", callback=command.do_exportdb))
+		self.dispatcher.add_handler(CommandHandler(command="importdb", callback=command.do_importdb))
 
 
 		'''

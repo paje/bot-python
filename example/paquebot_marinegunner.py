@@ -1,6 +1,9 @@
 from alphabet_detector import AlphabetDetector
-import logging
-import logging.config
+from langdetect import detect_langs
+
+
+from enum import IntEnum, Enum, unique
+
 
 from bot.bot import Bot
 from bot.filter import Filter
@@ -21,6 +24,8 @@ from paquebot_party import PartyStatus as partystatus
 from paquebot_crew import CrewGrades as grades
 from paquebot_whoiswhere import Whoiswhere as wiw
 
+import logging
+import logging.config
 log = logging.getLogger(__name__)
 
 
@@ -56,6 +61,56 @@ def extract_values(obj, key2extract):
 	return results
 
 
+# Return True if the message is okay from a charset point of view
+def check_txtcharsets(bot, event):
+	place = "group"
+	cid = event.data["chat"]["chatId"]
+	mid = event.data["msgId"]
+	from_uid = event.data["from"]["userId"]
+	
+	ad = AlphabetDetector()
+	texts = extract_values(event.data, "text")
+
+	log.debug('Authorized charsets in @[%s]: %s'%(cid, str(bot.parties.get_charsets(cid))))
+
+	if bot.parties.get_charsets(cid) is not None and str(bot.parties.get_charsets(cid)) != "":
+		for charset in list(str(bot.parties.get_charsets(cid)).split(" ")):
+			if charset != "":
+
+
+				log.debug('Testinng charset %s on %s'%(charset, texts))
+				for txt in texts:
+					if ad.only_alphabet_chars(txt, charset):
+						log.debug('text is okay')
+					else:
+						log.debug('text is not authorized')
+						
+						# Removing old message in the room
+						oldwarning_msgid = bot.parties.get_languagewarnmsgid(cid)
+						if oldwarning_msgid != "":
+							log.debug('Removing old warning msg')
+							bot.delete_messages(cid, oldwarning_msgid)
+
+						if bot.parties.get_languagemsg(cid) == "":
+							warning_msgid = bot.send_text(chat_id=cid, text=_("@[%s] language not authorized"%(from_uid))).json()['msgId']
+						else:
+							warning_msgid = bot.send_text(chat_id=cid, text=("%s"%bot.parties.get_languagemsg(cid).format(uid="@[%s]"%from_uid, channelid="@[%s]"%cid, msgid="%s"%mid))).json()['msgId']
+
+
+	pass
+
+
+def check_txtlanguage(bot, event):
+	pass
+
+def check_link(bot, event):
+	pass
+
+def check_media(bot, event):
+	pass
+
+def check_sticker(bot, event):
+	pass
 
 
 def watch_txt(bot, event):
@@ -93,15 +148,18 @@ def watch_txt(bot, event):
 	log.debug('Parsing msg %s from %s in %s'%(mid, from_uid, cid))
 	crew = bot.get_crew()
 	print("Bot parties: %s %s"%(type(bot.parties),str(bot.parties)))
-	if bot.parties.is_managed(cid):
+
+	# txt = event.data["text"]
+	# May be multiple text (in case of forwards)
+	texts = extract_values(event.data, "text")
+
+	if bot.parties.is_managed(cid) and not bot.crew.is_bartender(from_uid):
 		log.debug('Authorized charsets in @[%s]: %s'%(cid, str(bot.parties.get_charsets(cid))))
 
 		if bot.parties.get_charsets(cid) is not None and str(bot.parties.get_charsets(cid)) != "":
 			for charset in list(str(bot.parties.get_charsets(cid)).split(" ")):
 				if charset != "":
-					# txt = event.data["text"]
-					# May be multiple text (in case of forwards)
-					texts = extract_values(event.data, "text")
+
 
 					log.debug('Testinng charset %s on %s'%(charset, texts))
 					for txt in texts:
@@ -132,6 +190,7 @@ def watch_txt(bot, event):
 								# Removing incorrect msg 
 								bot.delete_messages(cid, mid)
 
+
 								'''
 								# Muting the user if he crossed the boundaries
 								wiw.mute(from_uid, cid):
@@ -139,3 +198,9 @@ def watch_txt(bot, event):
 								pass
 								'''
 
+
+	for txt in texts:
+		try:
+			log.debug("Detected languages: \n\t%s\n\t%s"%(txt, detect_langs(txt)))
+		except Exception:
+			log.error("Exception while detecting language!")

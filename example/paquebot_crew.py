@@ -169,7 +169,7 @@ class Crew():
 
 	def is_director(self, Uid):
 		log.debug("Crew: Returnin True if %s is a %s"%(Uid, CrewGrades.DIRECTOR.name))
-		index = self.get_index(cid)
+		index = self.get_index(Uid)
 		if index is not False:
 			if self.crew_ls[index].grade >= CrewGrades.DIRECTOR:
 				log.debug('%s is %s !!'%(Uid, CrewGrades.DIRECTOR.name))
@@ -182,7 +182,7 @@ class Crew():
 
 	def is_captain(self, Uid):
 		log.debug("Crew: Returnin True if %s is a %s"%(Uid, CrewGrades.CAPTAIN.name))
-		index = self.get_index(cid)
+		index = self.get_index(Uid)
 		if index is not False:
 			if self.crew_ls[index].grade >= CrewGrades.CAPTAIN:
 				log.debug('%s is %s !!'%(Uid, CrewGrades.CAPTAIN.name))
@@ -195,7 +195,7 @@ class Crew():
 
 	def is_second(self, Uid):
 		log.debug("Crew: Returnin True if %s is a %s"%(Uid, CrewGrades.SECOND.name))
-		index = self.get_index(cid)
+		index = self.get_index(Uid)
 		if index is not False:
 			if self.crew_ls[index].grade >= CrewGrades.SECOND:
 				log.debug('%s is %s !!'%(Uid, CrewGrades.SECOND.name))
@@ -208,12 +208,25 @@ class Crew():
 
 	def is_bartender(self, Uid):
 		log.debug("Crew: Returnin True if %s is a %s"%(Uid, CrewGrades.BARTENDER.name))
-		index = self.get_index(cid)
+		index = self.get_index(Uid)
 		if index is not False:
 			if self.crew_ls[index].grade >= CrewGrades.BARTENDER:
 				log.debug('%s is %s !!'%(Uid, CrewGrades.BARTENDER.name))
 				return True
 			else:
+				return False
+		else:
+			return False
+
+	def is_allowed(self, Uid, requested_grade):
+		log.debug("Crew: Returnin True if crew  %s has enough rights %s"%(Uid, requested_grade))
+		index = self.get_index(Uid)
+		if index is not False:
+			if self.crew_ls[index].grade >= CrewGrades(requested_grade):
+				log.debug("Allowed")
+				return True
+			else:
+				log.debug("Unsufficient rights")
 				return False
 		else:
 			return False
@@ -233,7 +246,7 @@ class Crew():
 	def set_grade(self, Uid, Grade):
 		log.debug('Promoting crewmember %s to %s'%(Uid, CrewGrades(Grade).name))
 
-		index = self.get_index(cid)
+		index = self.get_index(Uid)
 		if index is not False:
 			intGrade = int(Grade)
 			if intGrade == CrewGrades.OWNER \
@@ -257,7 +270,7 @@ class Crew():
 		log.debug('Gettin Nickame from %s'%(Uid))
 
 
-		index = self.get_index(cid)
+		index = self.get_index(Uid)
 		if index is not False:
 			setattr(self.crew_ls[index], 'nickname', Nickname)
 			self.db_session.commit()
@@ -270,12 +283,18 @@ class Crew():
 		log.debug('Changing Nickame from %s to %s'%(Uid, Nickname))
 
 
-		index = self.get_index(cid)
+		index = self.get_index(Uid)
 		if index is not False:
 			return self.crew_ls[index].nickname
 			return True
 		else:
 			return False
+
+	def get_all(self):
+
+		log.debug("Returning the list of crew members")
+
+		return self.crew_ls
 
 
 

@@ -20,7 +20,8 @@ RUN pip3 install mailru-im-bot \
 	sqlalchemy\
 	python-gettext \
 	alphabet-detector \
-	pytz
+	pytz \
+	langdetect 
 
 RUN mkdir /work
 VOLUME  /work/log /work/db

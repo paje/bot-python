@@ -1,0 +1,7 @@
+"@[{from_uid}] m'a demandé un nettoyage de printemps dans @[{about_cid}]"
+"L'utilisateur @[{about_uid}]\nn'est pas supprimé dans @[{aboud_cid}]\nil le faudrait mais il y est admin"
+"L'utilisateur @[{about_uid}]\supprimé du salon @[{aboud_cid}]\npour cause de nettoyage de printemps"
+"L'utilisateur @[{about_uid}]\naurait été supprimé du salon @[{aboud_cid}]\nsi j'y étais en mode ADMIN (et que j'y sois admin)"
+"L'utilisateur @[{about_uid}]\naurait été débloqué du salon @[{aboud_cid}]\npour cause de nettoyage de printemps"
+"L'utilisateur @[{about_uid}]\naurait été débloqué du salon @[{aboud_cid}]\nsi j'y étais en mode ADMIN (et que j'y sois admin)"
+"Le nettoyage de printemps sur le salon @[{about_cid}] est fini !"

@@ -3,6 +3,7 @@ import json
 import logging
 import logging.config
 import configparser
+import threading
 
 from time import sleep
 from gtts import gTTS
@@ -35,7 +36,9 @@ crew_logger = logging.getLogger("paquebot_crew")
 import paquebot_db as db
 import paquebot_party as party
 
-	
+import paquebot_marinegunner as gunner
+from paquebot_party import PartyStatus as partystatus	
+import paquebot_report as report
 
 ###########################################
 config = configparser.ConfigParser()
@@ -86,6 +89,7 @@ def sigterm_handler(_signo, _stack_frame):
 	print("No Panic.. were are not the Titanic")
 	# Send alive message
 	loveboat.send_text(chat_id=OWNER, text="[Dying] I have offended my Master and mankind because my work did not reach the quality it should have.")
+	report.send_report(loveboat, report.ReportStatus.ADMIN, "Stopping the bot... @[{about_uid}] is sinking...", from_uid=loveboat.uin, about_uid=loveboat.uin)
 	log.debug('Stopping bot')
 	loveboat.running = False
 	sleep(2)
@@ -104,8 +108,14 @@ def main():
 	for sig in catchable_sigs:
 		signal.signal(sig, sigterm_handler)  # Substitute handler of choice for `print`
 
+	report_thread = threading.Thread(target=report.start_polling, args=(loveboat, loveboat.uin), name="reportthread", daemon=True)
+	report_thread.start()
+
 	# Send alive message
 	loveboat.send_text(chat_id=OWNER, text="[Alive] Hello my Master, i'm alive now")
+	report.send_report(loveboat, report.ReportStatus.ADMIN, "@[{about_uid}] is starting", from_uid=loveboat.uin, about_uid=loveboat.uin)
+
+
 
 
 	# Starting a polling thread watching for new events from server. This is a non-blocking call

@@ -1,6 +1,9 @@
 import json, re
 import logging
 import logging.config
+import threading
+import time
+import os
 
 from alphabet_detector import AlphabetDetector
 
@@ -17,6 +20,7 @@ import paquebot_bot
 import paquebot_db as db
 import paquebot_party as party
 import paquebot_crew as crew
+import paquebot_cabinboy as cabinboy
 
 from paquebot_crew import CrewGrades as grades
 from paquebot_whoiswhere import Whoiswhere as wiw
@@ -226,7 +230,12 @@ def accept_command(bot, event, crew, order, aboutarg, grade):
 				# Deleting requests (to clean the room)
 				log.debug("Deleting order msg %s in %s"%(command.mid, command.cid))
 				bot.delete_messages(command.cid, command.mid)
-			return command
+
+			if crew.is_allowed(command.from_uid, grade):
+				return command
+			else:
+				bot.send_text(chat_id=command.from_uid, text=_("You should be at least %s to execute that command"%(CrewGrades(grade))))
+				return None
 		else:
 			log.debug("cant accept, command from a non crew member")
 			return None
@@ -304,10 +313,12 @@ def set_partyinteraction(bot, event):
 		bot.send_text(chat_id=command.from_uid,
 			  text="Bot in @[%s] should be : "%(command.cid),
 			  inline_keyboard_markup="[{}]".format(json.dumps([
-				  {"text": "Admin", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.ADMIN)},
-					  {"text": "Volubile", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.VOLUBILE)},
-					  {"text": "Watcher", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.WATCHING)},
-					  {"text": "Nothing", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.NONMANAGED)}
+					{"text": "Admin-only Report", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.ADMIN_REPORT)},
+					{"text": "Warning Report", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.WARNING_REPORT)},
+					{"text": "Admin", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.ADMIN)},
+					{"text": "Volubile", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.VOLUBILE)},
+					{"text": "Watcher", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.WATCHING)},
+					{"text": "Nothing", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.NONMANAGED), "style": "primary"}
 			  ])))
 
 def set_botinpartylevel(bot, event):
@@ -579,21 +590,20 @@ def help(bot, event):
 			bot.send_text(chat_id=command.from_uid, text=_("Houston, we have a problem"))
 			return False
 
-		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("Hello there"))
-		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("Do you need some help?"))
-		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("(!) You have to invite the bot in your room 1st"))
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("Hello there\nDo you need some help?\n(!) You have to invite the bot in your room 1st\n\n"))
 
-		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/joinparty - adding a room to the managed room"))
-		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/listparties - list managed rooms"))	
-		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/setpartylevel - set bot interaction level"))
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/joinparty - adding a room to the managed parties\n/listparties - list managed rooms\n/setpartylevel - set bot interaction level"))
 
-		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/listcrew - List the bot crew"))
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("A typical crew:\nOwner of the company, can do everything\nDirector, can hire and fire employees\nCaptain, can manage the bot, the parties\nSecond, can manage party members (remove, block, ...)\nBartender, can enjoy the party and talk to everybody in any language\nSeaman, can speak wihout flood warning"))
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/listcrew - List the bot crew\n/addcrewmember - Hire a user\n/delcrewmember - Fire a user"))
 
-		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/setpartycharsets - set allowed charsets in a room"))
-		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/listpartycharsets - list allowed charsets in a room"))	
-	
-		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/setlanguagemsg - customize warning msg for unauthorized language"))
-		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/getlanguagemsg - display language warning msg"))
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/setpartycharsets - set allowed charsets in a room\n/listpartycharsets - list allowed charsets in a room"))
+
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/setlanguagemsg - customize warning msg for unauthorized language - you may user {uid} to specifiy the user name\n/getlanguagemsg - display language warning msg"))
+
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/springcleaning - remove [deleted] user(s) from the room"))
+
+		bot.send_text(chat_id=event.data['chat']['chatId'], text=_("/exportdb - export configuration db to file\n/importdb - import configuration from file"))		
 
 	else:
 		return False
@@ -735,6 +745,96 @@ def del_crewmember(bot, event):
 		log.debug("Command is None")
 		return False
 
+
+def do_springcleaning(bot, event):
+	crew = bot.get_crew()
+	command = accept_command(bot, event, crew, 'springcleaning', aboutarg=True, grade=grades.CAPTAIN)	
+
+	if command is not None:
+
+		if command.cid == "":
+			command.cid = command.about_id
+
+		log.debug("%s ask to springcleaning on:  %s "%(command.from_uid, command.cid))
+
+		if bot.parties.is_managed(command.cid):
+			log.debug("springcleaning: starting the cleaning thread")
+
+			cleaning_thread = threading.Thread(target=cabinboy.springcleaning, args=(bot, command.from_uid, command.cid), name="springcleaning-%s"%(command.cid), daemon=True)
+			cleaning_thread.start()
+			'''
+			if not cabinboy.springcleaning(bot, command.from_uid, command.cid):
+				bot.send_text(chat_id=command.from_uid, text=_("Something wrong happend"))
+				log.debug("Something wrong happend")
+			'''
+	else:
+		log.debug("Command is None")
+		return False
+
+
+def get_info(bot, event):
+
+	crew = bot.get_crew()
+	command = accept_command(bot, event, crew, 'getinfo', aboutarg=True, grade=grades.SEAMAN)	
+
+	if command is not None:
+
+		target_uid= command.about_id.replace('@[', '').replace(']', '').strip()
+		log.debug("%s ask to get info on r %s "%(command.from_uid, target_uid))
+
+		if target_uid is not None:
+			resp = bot.get_chat_info(target_uid)
+			if resp.status_code == 200:
+				userinfo = json.loads(resp.text)
+				if userinfo['ok'] == True:
+					if 'firstName' in userinfo:
+						firstName = userinfo['firstName']
+					else:
+						firstName = "--unknown--"
+					if 'lastName' in userinfo:
+						lastName = userinfo['lastName']
+					else:
+						lastName = "--unknown--"
+					bot.send_text(chat_id=command.from_uid, text="User @[%s] First: %s Last:%s"%(target_uid, firstName, lastName ))
+					log.debug("I have a user: %s with infos: %s %s"%(target_uid, firstName, lastName))
+				else:
+					bot.send_text(chat_id=command.from_uid, text="Error on gettin info on user @[%s]"%(target_uid))
+					log.debug("Error on gettin info on user @[%s]"%(target_uid))
+
+			else:
+				bot.send_text(chat_id=command.from_uid, text="HTTP Error %s "%resp.status_code)
+				log.debug("HTTP Error %s "%resp.status_code)
+
+
+
+
+def do_exportdb(bot, event):
+	crew = bot.get_crew()
+	command = accept_command(bot, event, crew, 'listcrewmembers', aboutarg=False, grade=grades.DIRECTOR)	
+
+	if command is not None:
+		timestr = time.strftime("%Y%m%d-%H%M%S")
+		cwd = os.getcwd()
+		filename='%s/tmp/db-%s.json'%(cwd, timestr)
+		export_data = []
+		with open(filename, 'w') as json_file:
+			#data = json.load(json_file)
+			export_data = dict()
+			# Parties
+			json_parties = json.dumps(bot.parties.get_all())
+			log.debug('json parties : %s'%json_parties)
+
+			# Crew
+			export_data.append('Crew')
+			export_data['Crew']=bot.crew.get_all()
+			json.dump(export_data, json_file)
+
+def do_importdb(bot, event):
+	crew = bot.get_crew()
+	command = accept_command(bot, event, crew, 'listcrewmembers', aboutarg=False, grade=grades.DIRECTOR)	
+
+	if command is not None:
+		pass
 
 def do_guestwelcome(bot, event):
 	pass

@@ -27,10 +27,16 @@ log = logging.getLogger(__name__)
 @unique
 class PartyStatus(IntEnum):
 	# Status
+	ADMIN_REPORT = 6
+	WARNING_REPORT = 5
 	ADMIN = 4
 	VOLUBILE = 3
 	WATCHING = 2
 	NONMANAGED = 1
+
+	@classmethod
+	def has_value(cls, value):
+		return value in cls._value2member_map_ 
 
 
 class PartyStorage(db.Base):
@@ -66,7 +72,7 @@ class PartyStorage(db.Base):
 
 	def __init__(self, cid):
 		self.id = cid
-		self.status = int(PartyStatus.NONMANAGED)
+		# self.status = int(PartyStatus.NONMANAGED)
 
 
 		self.status = PartyStatus.NONMANAGED
@@ -161,7 +167,8 @@ class Parties():
 		def levelexists(level):
 			intLevel = int(level)
 			log.debug("Checking if %d level exists in the hierarchie"%intLevel)
-			if intLevel == PartyStatus.ADMIN or intLevel == PartyStatus.VOLUBILE or intLevel == PartyStatus.WATCHING or intLevel == PartyStatus.NONMANAGED:
+			if PartyStatus.has_value(intLevel):
+			#if intLevel == PartyStatus.ADMIN or intLevel == PartyStatus.VOLUBILE or intLevel == PartyStatus.WATCHING or intLevel == PartyStatus.NONMANAGED:
 				return True
 			else:
 				return False
@@ -296,7 +303,7 @@ class Parties():
 
 
 	def get_languagewarnmsgid(self, cid):
-		log.debug("Gettin language warnign msg for party %s"%(cid))
+		log.debug("Gettin language warning msg for party %s"%(cid))
 		index = self.get_index(cid)
 		if index is not False:
 			return self.parties_ls[index].languagewarning_msgid
@@ -316,3 +323,44 @@ class Parties():
 			log.error("%s is not managed"%cid)
 			return False
 
+
+	# return the report channel id(s)
+	def get_reportid(self):
+		log.debug("Returnin report channel id(s)")
+
+		id_list = []
+		for party in self.parties_ls:
+			if party.status == PartyStatus.WARNING_REPORT or party.status == PartyStatus.ADMIN_REPORT :
+				id_list.append(party.id)
+
+		log.debug("Report channels : %s"%id_list)
+		return id_list
+
+
+	# return the report channel id(s)
+	def is_warningreport(self, cid):
+		log.debug("Returnin if channel is a warning level report channel")
+
+
+		index = self.get_index(cid)
+		if index is not False:
+			if self.parties_ls[index].status == PartyStatus.WARNINGEPORT or self.parties_ls[index].status == PartyStatus.ADMINREPORT:
+				log.debug("channel %s is WARNING or ADMIN report level"%cid)
+				return True
+		return False
+
+	# return the report channel id(s)
+	def is_adminreport(self, cid):
+		log.debug("Returnin if channel is a admin level report channel")
+
+		index = self.get_index(cid)
+		if index is not False:
+			if self.parties_ls[index].status == PartyStatus.ADMINREPORT:
+				log.debug("channel %s is  ADMIN report level"%cid)
+				return True
+		return False
+
+
+	def get_all(self):
+		log.debug("Returning the list of parties")
+		return self.parties_ls
