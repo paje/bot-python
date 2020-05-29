@@ -1,3 +1,4 @@
+# Cabinboy
 "@[{from_uid}] ask me for a spring cleaning on @[{about_cid}]"
 "User @[{about_uid}]\nis kept in the room @[{aboud_cid}]\nhe is admin there!"
 "User @[{about_uid}]\ndeleted from the room @[{aboud_cid}]\ncause: spring cleaning"

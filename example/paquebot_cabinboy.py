@@ -35,10 +35,22 @@ def springcleaning(bot, from_uid, cid):
 	count=0
 	while cursor != "":
 		count += 1
-		if cursor != "True":
-			resp =bot.get_chat_members(chat_id=cid, cursor= cursor)
-		else:
-			resp =bot.get_chat_members(chat_id=cid)
+		# Try to get info on chan
+		try_count = 1
+		while try_count <= 10 :
+			try:
+				if cursor != "True":
+					resp =bot.get_chat_members(chat_id=cid, cursor= cursor)
+				else:
+					resp =bot.get_chat_members(chat_id=cid)
+			except:
+				bot.send_text(chat_id=from_uid, text="Error on gettin info on chat @[%s] try: %d/10"%(cid, try_count))
+				log.error("Error on gettin info on chat @[%s] try: %d/10"%(cid, try_count))
+				try_count += 1
+				# Seelping 60s before retry
+				sleep(60)
+				continue
+			break	
 
 		if resp.status_code == 200:
 			chatinfo = json.loads(resp.text)
@@ -55,46 +67,60 @@ def springcleaning(bot, from_uid, cid):
 
 				for user in chatinfo['members']:
 					# Avoiding api flood
-					sleep(0.5)
+					sleep(2)
 
-					resp = bot.get_chat_info(user['userId'])
-					if resp.status_code == 200:
-						userinfo = json.loads(resp.text)
-						if userinfo['ok'] == True:
-							if 'firstName' in userinfo:
-								firstName = userinfo['firstName']
-							else:
-								firstName = ""
-							if 'lastName' in userinfo:
-								lastName = userinfo['lastName']
-							else:
-								lastName = ""
-							if 'admin' in userinfo and userinfo['admin'] == 'true':
-								admin = True
-							else:
-								admin = False
-
-							if firstName == "[deleted]":
-								if admin:
-									log.debug("User @[%s] First: %s Last:%s\nis kept in the room @[%s]\nhe is admin there"%(user['userId'], firstName, lastName, cid))
-									report.send_report(bot, report.ReportStatus.WARNING, "User @[{about_uid}]\nis kept in the room @[{about_cid}]\nhe is admin there!", from_uid=from_uid, about_uid=user['userId'], about_cid=cid)
-								else:
-									if bot.parties.is_admin(cid):
-										#bot.send_text(chat_id=from_uid, text="Deleting user @[%s] First: %s Last:%s "%(user['userId'], firstName, lastName ))
-										log.debug("Deleging user @[%s] First: %s Last:%s "%(user['userId'], firstName, lastName))
-										# removing user from chan by blocking/unblocking it
-										bot.chat_block_user(self, cid, user['userId'], del_last_messages=False)
-										bot.chat_unblock_user(self, cid, user['userId'])
-										report.send_report(bot, report.ReportStatus.ADMIN, "User @[{about_uid}]\ndeleted from the room @[{about_cid}]\ncause: deleted users spring cleaning", from_uid=from_uid, about_uid=user['userId'], about_cid=cid)
+					# Try to get info on user
+					try_count = 1
+					while try_count <= 10 :
+						try:
+							resp = bot.get_chat_info(user['userId'])
+							if resp.status_code == 200:
+								userinfo = json.loads(resp.text)
+								if userinfo['ok'] == True:
+									if 'firstName' in userinfo:
+										firstName = userinfo['firstName']
 									else:
-										#bot.send_text(chat_id=from_uid, text="User @[%s] First: %s Last:%s would be deleted if I was admin"%(user['userId'], firstName, lastName ))
-										report.send_report(bot, report.ReportStatus.WARNING, "User @[{about_uid}]\nwould have deleted from the room @[{about_cid}]\nif i had an ADMIN level (and if i was admin there)", from_uid=from_uid, about_uid=user['userId'], about_cid=cid)
-										log.debug("User @[%s] First: %s Last:%s would be deleted if I was admin"%(user['userId'], firstName, lastName))
-						else:
-							bot.send_text(chat_id=from_uid, text="Error on gettin info on user @[%s]"%(user['userId']))
-							log.error("Error on gettin info on user @[%s]"%(user['userId']))
+										firstName = ""
+									if 'lastName' in userinfo:
+										lastName = userinfo['lastName']
+									else:
+										lastName = ""
 
-		sleep(2)
+									# Test if the user is admin in the targeted room
+									if 'admin' in user and user['admin'] == 'true':
+										admin = True
+									else:
+										admin = False
+
+									if firstName == "[deleted]":
+										if admin:
+											log.debug("User @[%s] First: %s Last:%s\nis kept in the room @[%s]\nhe is admin there"%(user['userId'], firstName, lastName, cid))
+											report.send_report(bot, report.ReportStatus.WARNING, "User @[{about_uid}]\nis kept in the room @[{about_cid}]\nhe is admin there!", from_uid=from_uid, about_uid=user['userId'], about_cid=cid)
+										else:
+											if bot.parties.is_admin(cid):
+												#bot.send_text(chat_id=from_uid, text="Deleting user @[%s] First: %s Last:%s "%(user['userId'], firstName, lastName ))
+												log.debug("Deleging user @[%s] First: %s Last:%s "%(user['userId'], firstName, lastName))
+												# removing user from chan by blocking/unblocking it
+												bot.chat_block_user(cid, user['userId'], del_last_messages=False)
+												bot.chat_unblock_user(cid, user['userId'])
+												report.send_report(bot, report.ReportStatus.ADMIN, "User @[{about_uid}]\ndeleted from the room @[{about_cid}]\ncause: deleted users spring cleaning", from_uid=from_uid, about_uid=user['userId'], about_cid=cid)
+											else:
+												#bot.send_text(chat_id=from_uid, text="User @[%s] First: %s Last:%s would be deleted if I was admin"%(user['userId'], firstName, lastName ))
+												report.send_report(bot, report.ReportStatus.WARNING, "User @[{about_uid}]\nwould have deleted from the room @[{about_cid}]\nif i had an ADMIN level (and if i was admin there)", from_uid=from_uid, about_uid=user['userId'], about_cid=cid)
+												log.debug("User @[%s] First: %s Last:%s would be deleted if I was admin"%(user['userId'], firstName, lastName))
+								else:
+									bot.send_text(chat_id=from_uid, text="Error on gettin info on user @[%s]"%(user['userId']))
+									log.error("Error on gettin info on user @[%s]"%(user['userId']))
+						except:
+							bot.send_text(chat_id=from_uid, text="Error on gettin info on user @[%s] try: %d/10"%(user['userId'], try_count))
+							log.error("Error on gettin info on user @[%s] try: %d/10"%(user['userId'], try_count))
+							try_count += 1
+							# Seelping 60s before retry
+							sleep(60)
+							continue
+						break							
+
+		sleep(15)
 		log.debug("Iteration %d We will continue the list with cursor @[%s]"%(count, cursor))
 
 	# Spring cleaning on blocked users
@@ -102,10 +128,23 @@ def springcleaning(bot, from_uid, cid):
 	count=0
 	while cursor != "":
 		count += 1
-		if cursor != "True":
-			resp =bot.get_chat_blocked_users(chat_id=cid, cursor= cursor)
-		else:
-			resp =bot.get_chat_blocked_users(chat_id=cid)
+
+		# Try to get banned on chan
+		try_count = 1
+		while try_count <= 10 :
+			try:
+				if cursor != "True":
+					resp =bot.get_chat_blocked_users(chat_id=cid, cursor= cursor)
+				else:
+					resp =bot.get_chat_blocked_users(chat_id=cid)
+			except:
+				bot.send_text(chat_id=from_uid, text="Error on gettin banned on chat @[%s] try: %d/10"%(cid, try_count))
+				log.error("Error on gettin banned on chat @[%s] try: %d/10"%(cid, try_count))
+				try_count += 1
+				# Seelping 60s before retry
+				sleep(60)
+				continue
+			break	
 
 		if resp.status_code == 200:
 			chatinfo = json.loads(resp.text)
@@ -122,38 +161,50 @@ def springcleaning(bot, from_uid, cid):
 
 				for user in chatinfo['members']:
 					# Avoiding api flood
-					sleep(0.5)
+					sleep(2)
 
-					resp = bot.get_chat_info(user['userId'])
-					if resp.status_code == 200:
-						userinfo = json.loads(resp.text)
-						if userinfo['ok'] == True:
-							if 'firstName' in userinfo:
-								firstName = userinfo['firstName']
-							else:
-								firstName = ""
-							if 'lastName' in userinfo:
-								lastName = userinfo['lastName']
-							else:
-								lastName = ""
-							if 'admin' in userinfo and userinfo['admin'] == 'true':
-								admin = True
-							else:
-								admin = False
+					# Try to get info on user
+					try_count = 1
+					while try_count <= 10 :
+						try:
+							resp = bot.get_chat_info(user['userId'])
+							if resp.status_code == 200:
+								userinfo = json.loads(resp.text)
+								if userinfo['ok'] == True:
+									if 'firstName' in userinfo:
+										firstName = userinfo['firstName']
+									else:
+										firstName = ""
+									if 'lastName' in userinfo:
+										lastName = userinfo['lastName']
+									else:
+										lastName = ""
+									if 'admin' in user and user['admin'] == 'true':
+										admin = True
+									else:
+										admin = False
 
-							if firstName == "[deleted]":
-								if bot.parties.is_admin(cid):
-									log.debug("Unblocking user @[%s] First: %s Last:%s "%(user['userId'], firstName, lastName))
-									bot.chat_unblock_user(self, cid, user['userId'])
-									report.send_report(bot, report.ReportStatus.ADMIN, "User @[{about_uid}]\ndeleted from the room @[{about_cid}]\ncause: deleted users spring cleaning", from_uid=from_uid, about_uid=user['userId'], about_cid=cid)
+									if firstName == "[deleted]":
+										if bot.parties.is_admin(cid):
+											log.debug("Unblocking user @[%s] First: %s Last:%s "%(user['userId'], firstName, lastName))
+											bot.chat_unblock_user(self, cid, user['userId'])
+											report.send_report(bot, report.ReportStatus.ADMIN, "User @[{about_uid}]\ndeleted from the room @[{about_cid}]\ncause: deleted users spring cleaning", from_uid=from_uid, about_uid=user['userId'], about_cid=cid)
+										else:
+											report.send_report(bot, report.ReportStatus.WARNING, "User @[{about_uid}]\nwould have deleted from the room @[{about_cid}]\nif i had an ADMIN level (and if i was admin there)", from_uid=from_uid, about_uid=user['userId'], about_cid=cid)
+											log.debug("User @[%s] First: %s Last:%s would be deleted if I was admin"%(user['userId'], firstName, lastName))
 								else:
-									report.send_report(bot, report.ReportStatus.WARNING, "User @[{about_uid}]\nwould have deleted from the room @[{about_cid}]\nif i had an ADMIN level (and if i was admin there)", from_uid=from_uid, about_uid=user['userId'], about_cid=cid)
-									log.debug("User @[%s] First: %s Last:%s would be deleted if I was admin"%(user['userId'], firstName, lastName))
-						else:
-							bot.send_text(chat_id=from_uid, text="Error on gettin info on user @[%s]"%(user['userId']))
-							log.error("Error on gettin info on user @[%s]"%(user['userId']))
+									bot.send_text(chat_id=from_uid, text="Error on gettin info on user @[%s]"%(user['userId']))
+									log.error("Error on gettin info on user @[%s]"%(user['userId']))
+						except:
+							bot.send_text(chat_id=from_uid, text="Error on gettin info on user @[%s] try: %d/10"%(user['userId'], try_count))
+							log.error("Error on gettin info on user @[%s] try: %d/10"%(user['userId'], try_count))
+							try_count += 1
+							# Seelping 60s before retry
+							sleep(60)
+							continue
+						break	
 
-		sleep(2)
+		sleep(15)
 		log.debug("Iteration %d We will continue the list with cursor @[%s]"%(count, cursor))
 
 	report.send_report(bot, report.ReportStatus.INFO, "Springcleaning on @[{about_cid}] is ended", from_uid=from_uid, about_cid=cid)

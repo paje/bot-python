@@ -46,7 +46,7 @@ class ReportStatus(IntEnum):
 report_queue = Queue(maxsize=0)
 
 class Report():
-	def __init__(self, level, message, from_uid, about_cid, about_uid, about_msgid):
+	def __init__(self, level, message, from_uid, about_cid, about_uid, about_msgid, specific_message):
 		if ReportStatus.has_value(level):
 			self.level = level
 		self.from_uid = from_uid
@@ -54,10 +54,11 @@ class Report():
 		self.about_uid = about_uid
 		self.about_msgid = about_msgid
 		self.message = message
+		self.specific_message = specific_message
 
 # Push a report inside the Queue
-def send_report(bot, level, message, from_uid, about_cid="", about_uid="", about_msgid=""):
-	report = Report(level, message, from_uid, about_cid, about_uid, about_msgid)
+def send_report(bot, level, message, from_uid, about_cid="", about_uid="", about_msgid="", specific_message=""):
+	report = Report(level, message, from_uid, about_cid, about_uid, about_msgid, specific_message)
 	report_queue.put(report)
 
 # Report into the different report rooms 
@@ -71,7 +72,8 @@ def broadcast_report(bot):
 			from_uid=report.from_uid,
 			about_cid=report.about_cid,
 			about_uid=report.about_uid,
-			about_msgid=report.about_msgid)
+			about_msgid=report.about_msgid,
+			specific_message=report.specific_message)
 		)
 		# Avoid backend flood
 		sleep(0.25)

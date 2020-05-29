@@ -52,6 +52,26 @@ class CrewManStorage(personstorage, db.Base):
 		self.grade = Grade
 		self.nickname = Nickname
 
+	def get_asjson(self):
+		json_values = json.dumps({
+			'id': self.id,
+			'grade': self.grade,
+			'nickname': self.nickname
+			})
+		log.debug('returning json : %s'%json_values)
+		return json_values
+
+	def load_fromjson(self, json_str):
+		json_values = json.loads(json_str)
+		for key, value in json_values.items():
+			if hasattr(self, key): # in self.__dict__.keys()
+				setattr(self, key, value)
+			else:
+				log.warning("%s has no %s attribule"%(self.__class_.__name__, key))
+
+		return True
+
+
 
 ##########################################
 #
@@ -87,6 +107,19 @@ class Crew():
 			#db.add_crewmember({"Nick": "12963645", "Role": DIRECTOR})
 			#db.add_crewmember({"Nick": "708800750", "Role": CAPTAIN})
 			#db.add_crewmember({"Nick": "673338941", "Role": SECOND})
+
+
+
+
+	def get_asjson(self):
+		log.debug("Returning the list of crewmembers as json")
+		crew = []
+		for crewman in self.crew_ls:
+			crew.append(json.loads(crewman.get_asjson()))
+
+		log.debug("Crew json : %s"%str(json.dumps(crew)))			
+		return json.dumps(crew)
+
 
 	# Count team members
 	def size(self):

@@ -177,6 +177,17 @@ class PaqueBot(Bot):
 		self.dispatcher.add_handler(MessageHandler(filters=Filter.forward, callback=gunner.watch_txt))
 		self.dispatcher.add_handler(MessageHandler(filters=Filter.reply, callback=gunner.watch_txt))	
 
+
+
+		# Handler for url
+		self.dispatcher.add_handler(MessageHandler(filters=Filter.url & ~Filter.sticker, callback=gunner.watch_url))
+
+
+		# Handler for add user to chat
+		self.dispatcher.add_handler(NewChatMembersHandler(callback=command.do_guestwelcome))
+
+
+
 		# Any other user command handler
 		#self.dispatcher.add_handler(CommandHandler(command="test", callback=command.test_cb))
 
@@ -201,10 +212,6 @@ class PaqueBot(Bot):
 		))
 		'''
 
-		'''
-		# Handler for add user to chat
-		self.dispatcher.add_handler(NewChatMembersHandler(callback=command.do_guestwelcome))
-		'''
 
 		'''
 		# Handler for left user from chat
