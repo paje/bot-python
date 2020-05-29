@@ -1,3 +1,3 @@
-# Party en francais
-"Soyez la bienvenue {users}, merci de bien lire les règles du salon!"
-"Ce n'est qu'un aurevoir {users}"
+# Party
+"Soyez la bienvenue {about_uid}, merci de bien lire les regles du salon!"
+"Ce n'est qu'un aurevoir {about_uid}"

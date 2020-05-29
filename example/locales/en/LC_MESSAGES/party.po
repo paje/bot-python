@@ -1,2 +1,3 @@
-# Party in english
-"Welcome {users}, beware of the channel rules!"
+# Party
+"Welcome {user}, beware of the channel rules!"
+"This is only a good-bye {user}"

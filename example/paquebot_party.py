@@ -5,6 +5,7 @@ import operator
 from enum import IntEnum, Enum, unique
 from datetime import datetime
 import pytz	
+from datetime import date
 
 from sqlalchemy import create_engine, inspect, Column, String, Integer, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
@@ -23,6 +24,20 @@ import paquebot_db as db
 
 
 log = logging.getLogger(__name__)
+
+class EnumEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if type(obj) in PartyStatus.values():
+            return {"PartyStatus": str(obj)}
+        return json.JSONEncoder.default(self, obj)
+
+def as_enum(d):
+    if "PartyStatus" in d:
+        name, member = d["PartyStatus"].split(".")
+        return getattr(PartyStatus[name], member)
+    else:
+        return d
+
 
 @unique
 class PartyStatus(IntEnum):
@@ -83,10 +98,37 @@ class PartyStorage(db.Base):
 		self.rules_msg = ""
 
 		self.authorized_charsets = ""
-		self.authorized_languages = ""		
+		self.authorized_languages = ""	
+
 		self.language_msg = ""
 		self.languageredemption_d = 1
 		self.languagewarning_msgid = ""
+
+	def get_asjson(self):
+		json_values = json.dumps({
+			'id': self.id,
+			'status': int(self.status),
+			'timezone': self.timezone,
+			'locale': self.locale,
+			'rules_msg': self.rules_msg,
+			'authorized_charsets': self.authorized_charsets,
+			'authorized_languages': self.authorized_languages,
+			'language_msg': self.language_msg,
+			'languageredemption_d': int(self.languageredemption_d)
+			})
+		log.debug('returning json : %s'%json_values)
+		return json_values
+
+	def load_fromjson(self, json_str):
+		json_values = json.loads(json_str)
+		for key, value in json_values.items():
+			if hasattr(self, key): # in self.__dict__.keys()
+				setattr(self, key, value)
+			else:
+				log.warning("%s has no %s attribule"%(self.__class_.__name__, key))
+
+		return True
+
 
 
 class Parties():
@@ -101,6 +143,18 @@ class Parties():
 		self.parties_ls = self.db_session.query(PartyStorage).all()
 		self.parties_ls.sort(key=operator.attrgetter('id'))
 		log.debug("%d parties are defined"%(len(self.parties_ls)))
+		# self.get_asjson()
+
+	def get_asjson(self):
+		log.debug("Returning the list of parties as json")
+		parties = []
+		for party in self.parties_ls:
+			parties.append(json.loads(party.get_asjson()))
+
+		log.debug("Parties json : %s"%str(json.dumps(parties)))			
+		return json.dumps(parties)
+
+
 
 
 	def exist(self, cid):
@@ -361,6 +415,27 @@ class Parties():
 		return False
 
 
-	def get_all(self):
-		log.debug("Returning the list of parties")
-		return self.parties_ls
+	# Guest welcome msg
+	def get_welcomemsg(self, cid):
+		log.debug("Gettin welcome msg for party %s"%(cid))
+		index = self.get_index(cid)
+		if index is not False:
+			return self.parties_ls[index].welcome_msg
+		else:
+			log.error("%s is not managed"%cid)
+			return None
+
+	def set_welcomemsg(self, cid, msg):
+		log.debug("Adding welcome msg %s to party %s"%(msg, cid))
+		index = self.get_index(cid)
+		if index is not False:
+			setattr(self.parties_ls[index], 'welcome_msg', str(msg))
+			self.db_session.commit()
+			self.db_session.flush()
+			return True
+		else:
+			log.error("%s is not managed"%cid)
+			return False
+
+
+

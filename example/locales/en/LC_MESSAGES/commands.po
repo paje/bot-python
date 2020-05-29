@@ -1,3 +1,4 @@
+# Commands
 "Sorry, you should be at least CAPTAIN to add channel to parties"
 "%s added"
 "Sorry, got problem"

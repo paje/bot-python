@@ -310,16 +310,37 @@ def set_partyinteraction(bot, event):
 		if command.cid == "":
 			command.cid = command.about_id
 
+
+		party_level_markup = [
+			[{
+				"text": "Admin-only Report",
+				"callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.ADMIN_REPORT)
+			}],
+			[{
+				"text": "Warning Report",
+				"callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.WARNING_REPORT)
+			}],
+			[{
+				"text": "Admin",
+				"callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.ADMIN)
+			}],
+			[{
+				"text": "Volubile",
+				"callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.VOLUBILE)
+			}],
+			[{
+				"text": "Watcher",
+				"callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.WATCHING)
+			}],
+			[{
+				"text": "Nothing",
+				"callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.NONMANAGED),
+				"style": "primary"
+			}],
+		]
 		bot.send_text(chat_id=command.from_uid,
 			  text="Bot in @[%s] should be : "%(command.cid),
-			  inline_keyboard_markup="[{}]".format(json.dumps([
-					{"text": "Admin-only Report", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.ADMIN_REPORT)},
-					{"text": "Warning Report", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.WARNING_REPORT)},
-					{"text": "Admin", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.ADMIN)},
-					{"text": "Volubile", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.VOLUBILE)},
-					{"text": "Watcher", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.WATCHING)},
-					{"text": "Nothing", "callbackData": "setbotinpartylevel %s %d"%(command.cid, party.PartyStatus.NONMANAGED), "style": "primary"}
-			  ])))
+			  inline_keyboard_markup=json.dumps(party_level_markup))
 
 def set_botinpartylevel(bot, event):
 
@@ -819,15 +840,21 @@ def do_exportdb(bot, event):
 		export_data = []
 		with open(filename, 'w') as json_file:
 			#data = json.load(json_file)
-			export_data = dict()
-			# Parties
-			json_parties = json.dumps(bot.parties.get_all())
-			log.debug('json parties : %s'%json_parties)
+			export_data = []
+			export_data.append(json.loads(bot.parties.get_asjson()))
+			export_data.append(json.loads(bot.crew.get_asjson()))
 
-			# Crew
-			export_data.append('Crew')
-			export_data['Crew']=bot.crew.get_all()
 			json.dump(export_data, json_file)
+
+	with open(filename, 'r') as json_file:
+			bot.send_file(chat_id=command.from_uid, file=json_file.read(),  caption="DB as JSON")
+			# Crew
+			#export_data.append('Crew')
+			#export_data['Crew']=bot.crew.get_all()
+			#json.dump(export_data, json_file)
+
+			# bot.send_text(chat_id=command.from_uid, text="JSON OUTPUT\n%s"%json.loads(json_parties))
+
 
 def do_importdb(bot, event):
 	crew = bot.get_crew()
@@ -836,8 +863,65 @@ def do_importdb(bot, event):
 	if command is not None:
 		pass
 
+
+def set_welcomemsg(bot, event):
+	crew = bot.get_crew()
+	command = accept_command(bot, event, crew, 'set_languagemsg', aboutarg=False, grade=grades.SECOND)
+
+	if command is not None:
+
+		if command.cid == "":
+			command.cid = command.about_id
+
+		log.debug('Setting welcome msg %s on %s'%(command.target_value, command.cid))
+
+
+		if bot.parties.exist(command.cid):
+
+			languagemsg	= command.target_value
+			if bot.parties.set_welcomeemsg(command.cid, languagemsg):
+				bot.send_text(chat_id=command.from_uid, text=_("@[%s] is now configured with the following welcome msg : %s"%(command.cid, bot.parties.get_welcomemsg(command.cid))))
+				return True
+			else:
+				bot.send_text(chat_id=command.from_uid, text=_("Unrecoverable error"))
+				return False
+		else:
+			bot.send_text(chat_id=command.from_uid, text="Unmanaged party @[%s]"%(command.cid))
+			return False
+	else:
+		log.debug("Command is None")
+		return False
+
+
+def get_welcomemsg(bot, event):
+	crew = bot.get_crew()
+	command = accept_command(bot, event, crew, 'set_languagemsg', aboutarg=False, grade=grades.SECOND)
+
+	if command is not None:
+
+		if command.cid == "":
+			command.cid = command.about_id
+
+		log.debug('Gettin welcome msg %s on %s'%(command.target_value, command.cid))
+
+		if bot.parties.exist(command.cid):
+			bot.send_text(chat_id=command.from_uid, text=_("@[%s] is configured with the following welcome msg : %s"%(command.cid, bot.parties.get_welcomemsg(command.cid))))
+			return True
+		else:
+			bot.send_text(chat_id=command.from_uid, text="Unmanaged party @[%s]"%(command.cid))
+			return False
+	else:
+		log.debug("Command is None")
+		return False		
+
+
+
 def do_guestwelcome(bot, event):
-	pass
+	crew = bot.get_crew()
+	command = accept_command(bot, event, crew, 'getinfo', aboutarg=True, grade=grades.SEAMAN)	
+
+	if command is not None:
+		pass
 
 def do_guestgoodbye(bot, event):
 	pass

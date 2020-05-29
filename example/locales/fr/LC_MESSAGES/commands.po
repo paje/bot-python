@@ -1,6 +1,6 @@
-# Commands en francais
-"Désolé, le niveau CAPTAIN est requis pour rejoindre une PARTY"
-"%s ajouté"
-"Désolé y'a problème"
+# Commands
+"Desole, le niveau CAPTAIN est requis pour rejoindre une PARTY"
+"%s a ete ajoute"
+"Desole y'a probleme"
 "Attention, mesdames et messieurs, dans un instant on va commencer"
 "Ceci est un message d'aide"
