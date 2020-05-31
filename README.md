@@ -2,7 +2,8 @@
 
 # ICQ PaqueBOT admin-help bot
 
-*Love, exciting and new*
+*Love, exciting and new.*
+
 *Come Aboard. We're expecting you.*
 
 
@@ -31,6 +32,7 @@ Something like *git clone https://github.com/paje/icq-paquebot.git*
 ## Customize the paquebot.ini configuration file from the paqebot.ini.example file
 
 ICQBOT_TOKEN = ---.--------.--------:------- # your token
+
 ICQBOT_OWNER = ---------  # The owner ICQ ID
 
 ## Run it 
