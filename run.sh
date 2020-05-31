@@ -6,12 +6,7 @@ WORKDIR=$(pwd)
 mkdir -p ${WORKDIR}/db ${WORKDIR}/log ${WORKDIR}/tmp 
 
 
-docker build .  \
-	--build-arg ICQBOT_NAME=${ICQBOT_NAME} \
-	--build-arg ICQBOT_TOKEN=${ICQBOT_TOKEN} \
-	--build-arg ICQBOT_OWNER=${ICQBOT_OWNER} \
-	--build-arg ICQBOT_VERSION=${ICQBOT_VERSION} \
-	-t ${ICQBOT_NAME}:${ICQBOT_VERSION}
+docker build . 
 
 
 docker run \
