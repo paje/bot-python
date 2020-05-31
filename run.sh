@@ -6,7 +6,8 @@ WORKDIR=$(pwd)
 mkdir -p ${WORKDIR}/db ${WORKDIR}/log ${WORKDIR}/tmp 
 
 
-docker build . 
+docker build . \
+	-t paquebot
 
 
 docker run \
@@ -14,4 +15,4 @@ docker run \
 	--mount type=bind,source=${WORKDIR}/db/,target=/work/db/ \
 	--mount type=bind,source=${WORKDIR}/tmp/,target=/work/tmp/ \
 	--rm \
-	-ti Paquebot
+	-ti paquebot
