@@ -21,12 +21,17 @@ Paquebot ICQ BOT is an icq admin-help bot running in a containerized python 3.X
     > Example: Bot(token=TOKEN, name=NAME, version=VERSION, api_url_base="https://api.icq.net/bot/v1"), by default we use the domain: https://api.icq.net/bot/v1
 
 ## Allow your bot to join groups
-telling **Metabot** */setjoingroups*
+
+telling **Metabot** */setjoingroups* --> *enable*
+
+telling **Metabot** */setprivacy* --> *disable*  
 
 ## Install docker on your computer
+
 https://get.docker.com/
 
 ## Download / clone the bot
+
 Something like *git clone https://github.com/paje/icq-paquebot.git*
 
 ## Customize the paquebot.ini configuration file from the paqebot.ini.example file
@@ -41,9 +46,11 @@ ICQBOT_OWNER = ---------  # The owner ICQ ID
 ## Invite the bot inside your rooms (you should be admin there)
 
 ## Tell the bot to join a party there
+
 typing */joinparty* in the ICQ room
 
 ## Add people to the crew
+
 /addcrewmember @... 
 
 
