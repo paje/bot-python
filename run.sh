@@ -3,11 +3,6 @@
 
 WORKDIR=$(pwd)
 
-if [ -z "${ICQBOT_VERSION}" ]
-then
-	export ICQBOT_VERSION=$(git describe --tags --abbrev=0)
-fi
-
 mkdir -p ${WORKDIR}/db ${WORKDIR}/log ${WORKDIR}/tmp 
 
 
