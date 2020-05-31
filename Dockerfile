@@ -45,5 +45,5 @@ COPY paquebot.ini /work/
 COPY *.py /work/
 COPY logging.ini /work/
 
-# ENTRYPOINT ["python3", "paquebot.py"]
+ENTRYPOINT ["python3", "paquebot.py"]
 
