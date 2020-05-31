@@ -1,0 +1,6 @@
+[default]
+ICQBOT_NAME = paquebot
+ICQBOT_TOKEN = ---.--------.--------:-------
+ICQBOT_OWNER = ---------
+ICQBOT_VERSION = 0.1.0
+ICQBOT_API_URL = https://api.icq.net/bot/v1
