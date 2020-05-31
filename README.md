@@ -1,8 +1,8 @@
-<img src="https://github.com/mail-ru-im/bot-python/blob/master/logo.png" width="100" height="100">
+<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f4/Pacific_Princess%2C_2008.jpg/220px-Pacific_Princess%2C_2008.jpg" width="220" height="165">
 
-# 🐍 bot-python
+# 🐍 ICQ PaqueBOT
 
-Pure Python interface for Bot API.
+ICQ Admin bot.
 
 # Table of contents
 - [Introduction](#introduction)
@@ -12,33 +12,19 @@ Pure Python interface for Bot API.
 
 # Introduction
 
-This library provides complete Bot API 1.0 interface and compatible with Python 2.7, 3.4, 3.5 and 3.6.
+Paquebot ICQ BOT is an icq admin-help bot running in a containerized python 3.X
 
 # Getting started
 
+
+## Normal ICQ Bot registration
 * Create your own bot by sending the /newbot command to <a href="https://icq.com/people/70001">Metabot</a> and follow the instructions.
     >Note: a bot can only reply after the user has added it to his contact list, or if the user was the first to start a dialogue.
 * You can configure the domain that hosts your ICQ server. When instantiating the Bot class, add the address of your domain.
     > Example: Bot(token=TOKEN, name=NAME, version=VERSION, api_url_base="https://api.icq.net/bot/v1"), by default we use the domain: https://api.icq.net/bot/v1
 
+## Customize the paquebot.ini configuration file
 
-> An example of how to use the framework can be seen in example/test_bot.py 
+ICQBOT_TOKEN = ---.--------.--------:------- # your token
+ICQBOT_OWNER = ---------  # The owner ICQ ID
 
-# Installing
-Install using pip:
-```bash
-pip install --upgrade mailru-im-bot
-```
-
-Install from sources:
-```bash
-git clone https://github.com/mail-ru-im/bot-python.git
-cd bot-python
-python setup.py install
-```
-
-# API description
-<ul>
-    <li><a href="https://icq.com/botapi/">icq.com/botapi/</a></li>
-    <li><a href="https://agent.mail.ru/botapi/">agent.mail.ru/botapi/</a></li>
-</ul>
