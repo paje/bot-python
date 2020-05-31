@@ -1,5 +1,4 @@
 from alphabet_detector import AlphabetDetector
-from langdetect import detect_langs
 import dns
 from dns import resolver,reversename
 from urllib.parse import urlparse
@@ -127,7 +126,7 @@ def check_txtcharsets(bot, event):
 						return False
 	return True
 
-
+'''
 def check_txtlanguage(bot, event):
 	place = "group"
 	cid = event.data["chat"]["chatId"]
@@ -142,6 +141,7 @@ def check_txtlanguage(bot, event):
 		except:
 			pass
 	return True
+'''
 
 def check_media(bot, event):
 	pass
@@ -221,7 +221,7 @@ def watch_txt(bot, event):
 				pass
 				'''
 
-		check_txtlanguage(bot, event)
+		# check_txtlanguage(bot, event)
 
 
 def watch_url(bot, event):
@@ -267,5 +267,6 @@ def watch_url(bot, event):
 			report.send_report(bot, report.ReportStatus.ADMIN, "User @[{about_uid}]\ndeleted and blocked in @[{about_cid}]\nPosting porn or illegal link:{specific_message}", from_uid=bot.uin, about_uid=from_uid, about_cid=cid, specific_message="domain %s not allowed"%o.hostname)
 			block_msgid = bot.send_text(chat_id=cid, text=_("Remind: No porn / no illegal link here")).json()['msgId']
 			# bot.chat_block_user(self, cid, user['userId'], del_last_messages=True)
-	
+		
+		
 	return True

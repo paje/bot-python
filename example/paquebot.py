@@ -8,6 +8,7 @@ import threading
 from time import sleep
 from gtts import gTTS
 import os
+import argparse
 
 import gettext
 _ = gettext.gettext
@@ -89,7 +90,7 @@ def sigterm_handler(_signo, _stack_frame):
 	print("No Panic.. were are not the Titanic")
 	# Send alive message
 	loveboat.send_text(chat_id=OWNER, text="[Dying] I have offended my Master and mankind because my work did not reach the quality it should have.")
-	report.send_report(loveboat, report.ReportStatus.ADMIN, "Stopping the bot... @[{about_uid}] is sinking...", from_uid=loveboat.uin, about_uid=loveboat.uin)
+	#report.send_report(loveboat, report.ReportStatus.ADMIN, "Stopping the bot... @[{about_uid}] is sinking...", from_uid=loveboat.uin, about_uid=loveboat.uin)
 	log.debug('Stopping bot')
 	loveboat.running = False
 	sleep(2)
@@ -113,7 +114,7 @@ def main():
 
 	# Send alive message
 	loveboat.send_text(chat_id=OWNER, text="[Alive] Hello my Master, i'm alive now")
-	report.send_report(loveboat, report.ReportStatus.ADMIN, "@[{about_uid}] is starting", from_uid=loveboat.uin, about_uid=loveboat.uin)
+	# report.send_report(loveboat, report.ReportStatus.ADMIN, "@[{about_uid}] is starting", from_uid=loveboat.uin, about_uid=loveboat.uin)
 
 
 

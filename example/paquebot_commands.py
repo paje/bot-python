@@ -837,12 +837,15 @@ def do_exportdb(bot, event):
 		timestr = time.strftime("%Y%m%d-%H%M%S")
 		cwd = os.getcwd()
 		filename='%s/tmp/db-%s.json'%(cwd, timestr)
-		export_data = []
 		with open(filename, 'w') as json_file:
 			#data = json.load(json_file)
 			export_data = []
-			export_data.append(json.loads(bot.parties.get_asjson()))
-			export_data.append(json.loads(bot.crew.get_asjson()))
+			parties = []
+			parties.append({'parties': json.loads(bot.parties.get_asjson())})
+			export_data.append(parties)
+			crew = []
+			crew.append({'crew': json.loads(bot.crew.get_asjson())})
+			export_data.append(crew)
 
 			json.dump(export_data, json_file)
 
