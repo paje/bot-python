@@ -1,8 +1,6 @@
 #!/bin/bash
 
 
-source ./setenv.sh
-
 WORKDIR=$(pwd)
 
 if [ -z "${ICQBOT_VERSION}" ]
