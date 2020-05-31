@@ -18,7 +18,15 @@ RUN pip3 install mailru-im-bot \
 	alphabet-detector \
 	pytz \
   jsons \
-  dnspython
+  dnspython \
+  cached-property \
+  enum34 \
+  expiringdict \
+  monotonic \
+  python-baseconv \
+  requests \
+  six \
+  gTTS
 
 RUN mkdir /work
 

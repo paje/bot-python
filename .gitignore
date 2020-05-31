@@ -24,3 +24,12 @@ __pycache__/
 # Windows useless files.
 Thumbs.db
 desktop.ini
+
+# Specific Paquebot
+paquebot.ini
+setenv.sh
+paquebot_db.json
+db/*
+log/*
+tmp/*
+env_file
