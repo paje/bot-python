@@ -1,6 +1,13 @@
 import json, re
 import threading
 
+from requests import Request
+from requests.adapters import HTTPAdapter
+
+
+from threading import Thread, Lock
+from expiringdict import ExpiringDict
+
 
 from bot.bot import Bot, LoggingHTTPAdapter, BotLoggingHTTPAdapter, FileNotFoundException, SkipDuplicateMessageHandler
 from bot.filter import Filter
@@ -11,9 +18,6 @@ from bot.util import signal_name_by_code
 from bot.event import Event, EventType
 from bot.dispatcher import Dispatcher, StopDispatching
 
-
-from threading import Thread, Lock
-from expiringdict import ExpiringDict
 
 import logging
 import logging.config
@@ -39,7 +43,7 @@ log = logging.getLogger(__name__)
 class PaqueBot(Bot):
 
 
-	def __init__(self, token, crew, maindb, api_url_base=None, name=None, version=None, owner=None, timeout_s=20, poll_time_s=60):
+	def __init__(self, token, crew, maindb,api_url_base=None, name=None, version=None, owner=None, timeout_s=20, poll_time_s=60):
 
 		super(Bot, self).__init__()
 
@@ -158,7 +162,13 @@ class PaqueBot(Bot):
 
 		# Export/Import
 		self.dispatcher.add_handler(CommandHandler(command="exportdb", callback=command.do_exportdb))
+
+
 		self.dispatcher.add_handler(CommandHandler(command="importdb", callback=command.do_importdb))
+
+
+		# Handler for no media file. For example, text file
+		self.dispatcher.add_handler(MessageHandler(filters=Filter.data, callback=command.receive_file))
 
 
 		'''
@@ -184,8 +194,7 @@ class PaqueBot(Bot):
 
 
 		# Handler for add user to chat
-		self.dispatcher.add_handler(NewChatMembersHandler(callback=command.do_guestwelcome))
-
+		self.dispatcher.add_handler(NewChatMembersHandler(callback=gunner.do_guestwelcome))
 
 
 		# Any other user command handler
@@ -255,10 +264,9 @@ class PaqueBot(Bot):
 		#self.dispatcher.add_handler(MessageHandler(filters=Filter.regexp("^\d*$"), callback=command.regexp_only_dig_cb))
 
 		'''
-		# Handler for no media file. For example, text file
-		self.dispatcher.add_handler(MessageHandler(filters=Filter.data, callback=command.file_cb))
-		'''
 
+
+		'''
 		'''
 		# Handlers for other file types
 		self.dispatcher.add_handler(MessageHandler(filters=Filter.image, callback=command.image_cb))
@@ -312,6 +320,49 @@ class PaqueBot(Bot):
 
 		self.dispatcher.add_handler(CommandHandler(command="info", callback=command.info))	
 		'''
+
+
+
+	def get_file(self, file_url, local_file_name):
+		log.debug("Downloading %s as local file %s"%(file_url, local_file_name))
+
+
+		request = Request(method="GET", url=file_url)
+		resp = self.http_session.send(request.prepare(), timeout=self.timeout_s)
+		# req.raise_for_status()
+		with open(local_file_name, 'wb') as f:
+			for chunk in resp.iter_content(chunk_size=8192): 
+				f.write(chunk)
+		f.close()
+		return True
+
+	def send_file(self, chat_id, file_id=None, file=None, caption=None, reply_msg_id=None, forward_chat_id=None, forward_msg_id=None, inline_keyboard_markup=None, file_name=None):
+
+		request = Request(
+			method="GET",
+			url="{}/messages/sendFile".format(self.api_base_url),
+			params={
+				"token": self.token,
+				"chatId": chat_id,
+				"fileId": file_id,
+				"caption": caption,
+				"replyMsgId": reply_msg_id,
+				"forwardChatId": forward_chat_id,
+				"forwardMsgId": forward_msg_id,
+				"inlineKeyboardMarkup": inline_keyboard_markup
+			}
+		)
+		if file:
+			request.method = "POST"
+			if file_name:
+				request.files = {"file": (file_name, file)}
+			else:
+				request.files = {"file": file}
+
+		return self.http_session.send(request.prepare(), timeout=self.timeout_s)
+
+
+
 
 	def get_crew(self):
 		return self.crew

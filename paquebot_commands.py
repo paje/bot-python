@@ -7,6 +7,10 @@ import os
 
 from alphabet_detector import AlphabetDetector
 
+
+from requests import Request
+from requests.adapters import HTTPAdapter
+
 from bot.bot import Bot
 from bot.filter import Filter
 from bot.handler import HelpCommandHandler, UnknownCommandHandler, MessageHandler, FeedbackCommandHandler, \
@@ -26,7 +30,6 @@ from paquebot_crew import CrewGrades as grades
 from paquebot_whoiswhere import Whoiswhere as wiw
 from paquebot_party import Parties as parties
 
-
 log = logging.getLogger(__name__)
 
 ##########################################
@@ -36,6 +39,37 @@ log = logging.getLogger(__name__)
 #
 ##########################################
 
+# From https://hackersandslackers.com/extract-data-from-complex-json-python/
+def extract_values(obj, key2extract):
+	"""Recursively pull values of specified key from nested JSON."""
+	log.debug("Entering extract_values with key %s on obj %s"%(key2extract, obj))
+
+	arr = []
+
+	def extract(obj, arr, key2extract):
+		"""Return all matching values in an object."""
+		if isinstance(obj, dict):
+			log.debug("object is dict with items: %s"%obj.items())
+			for key, value in obj.items():
+				if isinstance(value, (dict, list)):
+					log.debug("extracing %s with key %s"%(key, key2extract))
+					extract(value, arr, key2extract)
+				elif key == key2extract:
+					log.debug("appending value %s to the response"%(value))
+					arr.append(value)
+		elif isinstance(obj, list):
+			log.debug("object is list with items: %s"%obj)
+			for item in obj:
+				log.debug("extracing %s with key %s"%(arr, key2extract))
+				extract(item, arr, key2extract)
+		else:
+			log.error("obj is not list nor dict")
+
+		return arr
+
+	results = extract(obj, arr, key2extract)
+	log.debug("returning results %s for %s"%(results, key2extract))
+	return results
 
 
 class ReceivedCommand(object):
@@ -54,168 +88,171 @@ class ReceivedCommand(object):
 		log.debug("New command received")			
 
 		self.verb = command
-		self.from_uid = event.data["from"]["userId"]
 
-		if "chat" in event.data:
-			if event.data["chat"]["type"] == "group" :
-				log.debug('msgID was in group : %s'%(event.data["chat"]["chatId"]))
+		if "callbackData" in event.data:
+				self.from_uid = event.data["from"]["userId"]
+				log.debug('msgID was in a callback msg from  : %s'%(self.from_uid))
 
 				'''
+
 				{"events": [{
-					"eventId": 1410,
+					"eventId": 1421,
 					"payload": {
-						"chat": {
-							"chatId": "682765231@chat.agent",
-							"title": "Test_Paquebot",
-							"type": "group"
-						},
+						"callbackData": "setcharset 682765231@chat.agent LATIN",
 						"from": {
 							"firstName": "-",
 							"userId": "12963645"
 						},
-						"msgId": "6824563135599071143",
-						"text": "/addcharset toto value",
-						"timestamp": 1588967427
-					},
-					"type": "newMessage"
-				}],
-				"ok": true}
-				'''
-
-				self.place = "group"
-				self.mid = event.data["msgId"]
-				self.cid = event.data["chat"]["chatId"]
-
-				log.debug('msgID-text : %s'%(event.data["text"]))
-
-				self.command 		= event.data["text"].split()[0] if len(event.data["text"].split()) > 0  else ""
-				if aboutarg == True:
-					self.about_id		= event.data["text"].split()[1] if len(event.data["text"].split()) > 1  else ""
-					# Target value --> the rest of the line
-					self.target_value 	= event.data["text"].replace(self.command, '').replace(self.about_id, '').strip()
-
-				else:
-					self.about_id		= ""
-					# Target value --> the rest of the line
-					self.target_value 	= event.data["text"].replace(self.command, '').strip()
-
-
-
-				# self.target_value	= event.data["text"].split()[2] if len(event.data["text"].split()) > 2  else ""
-
-				log.debug('Command : %s about: %s with target: %s'%(self.command, self.about_id, self.target_value))
-
-
-			elif event.data["chat"]["type"] == "private":
-				log.debug('msgID was in private msg from  : %s'%(self.from_uid))
-
-				'''
-				{"events": [{
-					"eventId": 1411,
-					"payload": {
-						"chat": {
-							"chatId": "12963645",
-							"type": "private"
+						"message": {
+							"chat": {
+								"chatId": "12963645",
+								"type": "private"
+							},
+							"from": {
+								"firstName": "Paquebot",
+								"nick": "Paquebot",
+								"userId": "752447728"
+							},
+							"msgId": "6824579278156333876",
+							"parts": [{
+								"payload": [[{
+									"callbackData": "setcharset 682765231@chat.agent GREEK",
+									"text": "GREEK"
+								},
+								{
+									"callbackData": "setcharset 682765231@chat.agent CYRILLIC",
+									"text": "CYRILLIC"
+								},
+								{
+									"callbackData": "setcharset 682765231@chat.agent LATIN",
+									"text": "LATIN"
+								}]],
+								"type": "inlineKeyboardMarkup"
+							}],
+							"text": "Add the following charset to @[682765231@chat.agent]",
+							"timestamp": 1588971186
 						},
-						"from": {
-							"firstName": "-",
-							"userId": "12963645"
-						},
-						"msgId": "6824564563598377148",
-						"text": "/addcharset cid valeu",
-						"timestamp": 1588967760
+						"queryId": "SVR:12963645:752447728:1588973579005939:1200-1588973579"
 					},
-					"type": "newMessage"
+					"type": "callbackQuery"
 				}], "ok": true}
+
 				'''
 
-				self.place = "private"
-				self.mid = event.data["msgId"]
-				self.cid = ""
+				self.place = "callback"
+				self.mid = event.data["message"]["msgId"]
+				# self.cid = event.data['callbackData'].split(" ")[2]
 
-				log.debug('msgID-text : %s'%(event.data["text"]))
-
-				self.command 		= event.data["text"].split()[0] if len(event.data["text"].split()) > 0  else ""
-				self.about_id 		= event.data["text"].split()[1] if len(event.data["text"].split()) > 1  else ""
+				self.command = event.data['callbackData'].split(" ")[0] if len(event.data['callbackData'].split(" ")) > 0  else ""
+				self.about_id = event.data['callbackData'].split(" ")[1] if len(event.data['callbackData'].split(" ")) > 1  else ""
 
 				# Target value --> the rest of the line
-				self.target_value 	= event.data["text"].replace(self.command, '').replace(self.about_id, '').strip()
+				self.target_value 	= event.data['callbackData'].replace(self.command, '').replace(self.about_id, '').strip()
 
-				# self.target_value 	= event.data["text"].split()[2] if len(event.data["text"].split()) > 2  else ""
+				# self.target_value = event.data['callbackData'].split(" ")[2] if len(event.data['callbackData'].split(" ")) > 2  else ""
 
 				log.debug('Command : %s about: %s with target %s'%(self.command, self.about_id, self.target_value))
 
 
-		elif event.data["callbackData"] is not None:
 
-			log.debug('msgID was in a callback msg from  : %s'%(self.from_uid))
+		elif event.data["chat"]["type"] == "group" :
+			self.from_uid = event.data["from"]["userId"]
+			log.debug('msgID was in group : %s'%(event.data["chat"]["chatId"]))
 
 			'''
-
 			{"events": [{
-				"eventId": 1421,
+				"eventId": 1410,
 				"payload": {
-					"callbackData": "setcharset 682765231@chat.agent LATIN",
+					"chat": {
+						"chatId": "682765231@chat.agent",
+						"title": "Test_Paquebot",
+						"type": "group"
+					},
 					"from": {
 						"firstName": "-",
 						"userId": "12963645"
 					},
-					"message": {
-						"chat": {
-							"chatId": "12963645",
-							"type": "private"
-						},
-						"from": {
-							"firstName": "Paquebot",
-							"nick": "Paquebot",
-							"userId": "752447728"
-						},
-						"msgId": "6824579278156333876",
-						"parts": [{
-							"payload": [[{
-								"callbackData": "setcharset 682765231@chat.agent GREEK",
-								"text": "GREEK"
-							},
-							{
-								"callbackData": "setcharset 682765231@chat.agent CYRILLIC",
-								"text": "CYRILLIC"
-							},
-							{
-								"callbackData": "setcharset 682765231@chat.agent LATIN",
-								"text": "LATIN"
-							}]],
-							"type": "inlineKeyboardMarkup"
-						}],
-						"text": "Add the following charset to @[682765231@chat.agent]",
-						"timestamp": 1588971186
-					},
-					"queryId": "SVR:12963645:752447728:1588973579005939:1200-1588973579"
+					"msgId": "6824563135599071143",
+					"text": "/addcharset toto value",
+					"timestamp": 1588967427
 				},
-				"type": "callbackQuery"
-			}], "ok": true}
-
+				"type": "newMessage"
+			}],
+			"ok": true}
 			'''
 
-			self.place = "callback"
-			self.mid = event.data["message"]["msgId"]
-			# self.cid = event.data['callbackData'].split(" ")[2]
+			self.place = "group"
+			self.mid = event.data["msgId"]
+			self.cid = event.data["chat"]["chatId"]
 
-			self.command = event.data['callbackData'].split(" ")[0] if len(event.data['callbackData'].split(" ")) > 0  else ""
-			self.about_id = event.data['callbackData'].split(" ")[1] if len(event.data['callbackData'].split(" ")) > 1  else ""
+			log.debug('msgID-text : %s'%(event.data["text"]))
+
+			self.command 		= event.data["text"].split()[0] if len(event.data["text"].split()) > 0  else ""
+			if aboutarg == True:
+				self.about_id		= event.data["text"].split()[1] if len(event.data["text"].split()) > 1  else ""
+				# Target value --> the rest of the line
+				self.target_value 	= event.data["text"].replace(self.command, '').replace(self.about_id, '').strip()
+
+			else:
+				self.about_id		= ""
+				# Target value --> the rest of the line
+				self.target_value 	= event.data["text"].replace(self.command, '').strip()
+
+
+
+			# self.target_value	= event.data["text"].split()[2] if len(event.data["text"].split()) > 2  else ""
+
+			log.debug('Command : %s about: %s with target: %s'%(self.command, self.about_id, self.target_value))
+
+
+		elif event.data["chat"]["type"] == "private":
+			self.from_uid = event.data["from"]["userId"]
+			log.debug('msgID was in private msg from  : %s'%(self.from_uid))
+
+			'''
+			{"events": [{
+				"eventId": 1411,
+				"payload": {
+					"chat": {
+						"chatId": "12963645",
+						"type": "private"
+					},
+					"from": {
+						"firstName": "-",
+						"userId": "12963645"
+					},
+					"msgId": "6824564563598377148",
+					"text": "/addcharset cid valeu",
+					"timestamp": 1588967760
+				},
+				"type": "newMessage"
+			}], "ok": true}
+			'''
+
+			self.place = "private"
+			self.mid = event.data["msgId"]
+			self.cid = ""
+
+			log.debug('msgID-text : %s'%(event.data["text"]))
+
+			self.command 		= event.data["text"].split()[0] if len(event.data["text"].split()) > 0  else ""
+			self.about_id 		= event.data["text"].split()[1] if len(event.data["text"].split()) > 1  else ""
 
 			# Target value --> the rest of the line
-			self.target_value 	= event.data['callbackData'].replace(self.command, '').replace(self.about_id, '').strip()
+			self.target_value 	= event.data["text"].replace(self.command, '').replace(self.about_id, '').strip()
 
-			# self.target_value = event.data['callbackData'].split(" ")[2] if len(event.data['callbackData'].split(" ")) > 2  else ""
+			# self.target_value 	= event.data["text"].split()[2] if len(event.data["text"].split()) > 2  else ""
 
 			log.debug('Command : %s about: %s with target %s'%(self.command, self.about_id, self.target_value))
 
 
-		else:
-			log.debug('where is that msg coming from ?')
-			self.place = "error"
 
 
+
+'''
+ Accep the command
+ and format the different needed attributes
+'''
 def accept_command(bot, event, crew, order, aboutarg, grade):
 
 	log.debug('Accepting command %s'%order)
@@ -245,9 +282,11 @@ def accept_command(bot, event, crew, order, aboutarg, grade):
 
 
 
-# Join a party (i.e. start managing it)
-# Captain level and above
 
+'''
+ Join a party (i.e. start managing it)
+ Captain level and above
+'''
 def join_party(bot, event):
 
 	crew = bot.get_crew()
@@ -400,6 +439,11 @@ def answer_buttons(bot, event):
 	elif event.data['callbackData'].startswith("addcrewmemberwithrank"):
 		log.debug('Button addcrewmemberwithrank')
 		add_crewmemberwithrank(bot, event)
+
+	elif event.data['callbackData'].startswith("doimportdb"):
+		log.debug('Button domimportdb')
+		do_importdb(bot, event)
+
 
 	else:
 		log.debug('Button unknown : %s'%(event.data['callbackData']))
@@ -633,7 +677,6 @@ def help(bot, event):
 '''
   set language message
 '''
-
 def set_languagemsg(bot, event):
 	crew = bot.get_crew()
 	command = accept_command(bot, event, crew, 'set_languagemsg', aboutarg=False, grade=grades.SECOND)
@@ -831,40 +874,157 @@ def get_info(bot, event):
 
 def do_exportdb(bot, event):
 	crew = bot.get_crew()
-	command = accept_command(bot, event, crew, 'listcrewmembers', aboutarg=False, grade=grades.DIRECTOR)	
+	command = accept_command(bot, event, crew, 'exportdb', aboutarg=False, grade=grades.DIRECTOR)	
 
 	if command is not None:
 		timestr = time.strftime("%Y%m%d-%H%M%S")
 		cwd = os.getcwd()
 		filename='%s/tmp/db-%s.json'%(cwd, timestr)
+
+		log.debug("Export DB to Json file : %s"%(filename))
+
 		with open(filename, 'w') as json_file:
 			#data = json.load(json_file)
 			export_data = []
-			parties = []
-			parties.append({'parties': json.loads(bot.parties.get_asjson())})
-			export_data.append(parties)
-			crew = []
-			crew.append({'crew': json.loads(bot.crew.get_asjson())})
-			export_data.append(crew)
+			#parties = []
+			#parties.append({'parties': json.loads(bot.parties.get_asjson())})
+			#export_data.append(parties)
+			export_data.append({'parties': json.loads(bot.parties.get_asjson())})
+			#crew = []
+			#crew.append({'crew': json.loads(bot.crew.get_asjson())})
+			# export_data.append(crew)
+			export_data.append({'crew': json.loads(bot.crew.get_asjson())})
 
 			json.dump(export_data, json_file)
+			json_file.close()
 
-	with open(filename, 'r') as json_file:
-			bot.send_file(chat_id=command.from_uid, file=json_file.read(),  caption="DB as JSON")
-			# Crew
-			#export_data.append('Crew')
-			#export_data['Crew']=bot.crew.get_all()
-			#json.dump(export_data, json_file)
+		with open(filename, 'r') as json_file:
+				bot.send_file(chat_id=command.from_uid, file=json_file.read(),  file_name="export.json", caption="DB as JSON")
+				json_file.close()
+				# Crew
+				#export_data.append('Crew')
+				#export_data['Crew']=bot.crew.get_all()
+				#json.dump(export_data, json_file)
 
-			# bot.send_text(chat_id=command.from_uid, text="JSON OUTPUT\n%s"%json.loads(json_parties))
+				# bot.send_text(chat_id=command.from_uid, text="JSON OUTPUT\n%s"%json.loads(json_parties))
 
 
 def do_importdb(bot, event):
 	crew = bot.get_crew()
-	command = accept_command(bot, event, crew, 'listcrewmembers', aboutarg=False, grade=grades.DIRECTOR)	
+	command = accept_command(bot, event, crew, 'importdb', aboutarg=True, grade=grades.DIRECTOR)	
 
 	if command is not None:
-		pass
+		if command.target_value != "":
+			log.debug("Trying to import json file with ICQ ID %s into db-"%(command.target_value))
+			resp =	bot.get_file_info(command.target_value)
+			if resp.status_code == 200:
+				info = json.loads(resp.text)
+				if info['ok'] == True:
+					log.debug("Get the following infos: %s "%(info))
+
+					timestr = time.strftime("%Y%m%d-%H%M%S")
+					cwd = os.getcwd()
+					if info['filename'] is not None:
+						import_filename='%s/tmp/%s-%s.json'%(cwd, info['filename'], timestr)
+					else:
+						import_filename='%s/tmp/genericimport-%s.json'%(cwd,  timestr)
+
+					if info['url'] is not None:
+						if bot.get_file(info['url'], import_filename):
+
+							bot.send_text(
+								chat_id=command.from_uid,
+								text="Loading {} downloaded".format(info['filename'])
+								)
+
+							with open(import_filename, 'r') as f:
+								data = json.load(f)
+								if data is None :
+									log.error("Error: import data problem")
+									return False
+								log.debug('Importing parties')
+								# for party in extract_values(data, 'party'):
+								for block in data:
+									log.debug('having block: %s'%block)
+									if "parties" in block:
+										log.debug('having parties in block: %s'%block)
+										bot.parties.load_fromjson(json.dumps(block["parties"]))
+
+									elif "crew" in block:
+										log.debug('having crew in block: %s'%block)
+										bot.crew.load_fromjson(json.dumps(block["crew"]))
+																	
+							f.close()
+
+					else:
+						log.error('Cant get file url')
+						return False	
+
+				else:
+					log.error('Cant get file info')
+					return False
+
+			else:
+				log.error("HTTP Error %s"%resp.status_code)
+				return False	
+
+		else:
+			log.error("Argument is missing")
+			return False
+	else:
+		log.error("Command is not known")
+		return False
+
+
+'''
+ Receive a file
+ Should be at least a crew member to interact with the bot with that stuff
+'''
+def receive_file(bot, event):
+
+	log.debug("entering receive_file with event %s"%(event))
+	crew = bot.get_crew()
+
+
+	if "from" in event.data and "userId" in event.data["from"]:
+		from_uid = event.data["from"]["userId"]
+	else:
+		from_uid = ""
+
+	about_fids=""
+	if "parts" in event.data:
+
+		for p in event.data["parts"]:
+			log.debug("payload: %s"%(p))
+			about_fids=" ".join((about_fids, p["payload"]["fileId"]))
+	else:
+		about_fids = ""
+
+
+	if from_uid != "" and crew.is_director(from_uid):
+		if about_fids != "":
+			log.debug("file ids: %s"%(about_fids))
+			bot.send_text(chat_id=from_uid,
+				  text=_("What should i Do with that file ?"),
+				  inline_keyboard_markup="[{}]".format(json.dumps([
+				  {"text": "Import the file JSON in the DB", "callbackData": "doimportdb %s"%(about_fids)}])))
+		else:
+			log.debug('No file joined ?!')
+			return False
+	else:
+		log.debug('Should be at least Director to do that')
+		return False
+
+
+def file_cb(bot, event):
+	if False:
+		bot.send_text(
+			chat_id=event.data['chat']['chatId'],
+			text="Files with {filed} fileId was received".format(
+				filed=", ".join([p['payload']['fileId'] for p in event.data['parts']])
+			)
+		)
+
 
 
 def set_welcomemsg(bot, event):
@@ -892,7 +1052,7 @@ def set_welcomemsg(bot, event):
 			bot.send_text(chat_id=command.from_uid, text="Unmanaged party @[%s]"%(command.cid))
 			return False
 	else:
-		log.debug("Command is None")
+		log.error("Command is None")
 		return False
 
 
@@ -917,22 +1077,6 @@ def get_welcomemsg(bot, event):
 		log.debug("Command is None")
 		return False		
 
-
-
-def do_guestwelcome(bot, event):
-	crew = bot.get_crew()
-	command = accept_command(bot, event, crew, 'getinfo', aboutarg=True, grade=grades.SEAMAN)	
-
-	if command is not None:
-		pass
-
-def do_guestgoodbye(bot, event):
-	pass
-
-def do_keepaneyeon(bot, event):
-	pass
-
-
 def unknown_command_cb(bot, event):
 	if False:
 		user = event.data['chat']['chatId']
@@ -943,6 +1087,28 @@ def unknown_command_cb(bot, event):
 				source=user, message=command[1:], command_body=command_body
 			)
 		)
+
+
+def message_with_bot_mention_cb(bot, event):
+	requester_uid = event.data["from"]["userId"]		
+	requested_cid = event.data["chat"]["chatId"]
+	request_msgid = event.data["msgId"]
+	request_text = event.data["text"]
+
+	if event.data["from"].get("firstName"):
+		request_from = event.data["from"].get("firstName")
+	elif event.data["from"].get("nick"):
+		request_from = event.data["from"].get("nick")
+	else:
+		request_from = event.data["from"].get("userId")
+	if re.match('.*(bonjour|bonsoir|salut).*', request_text,  re.IGNORECASE):
+		bot.send_text(
+			chat_id=event.data['chat']['chatId'],
+			text="Bonjour {}".format(request_from),
+			reply_msg_id=request_msgid
+		)
+
+
 
 
 def private_command_cb(bot, event):
@@ -970,26 +1136,6 @@ def deleted_message_cb(bot, event):
 		bot.send_text(chat_id=event.data['chat']['chatId'], text="Message {} was deleted".format(event.data['msgId']))
 
 
-def message_with_bot_mention_cb(bot, event):
-	requester_uid = event.data["from"]["userId"]		
-	requested_cid = event.data["chat"]["chatId"]
-	request_msgid = event.data["msgId"]
-	request_text = event.data["text"]
-
-	if event.data["from"].get("firstName"):
-		request_from = event.data["from"].get("firstName")
-	elif event.data["from"].get("nick"):
-		request_from = event.data["from"].get("nick")
-	else:
-		request_from = event.data["from"].get("userId")
-	if re.match('.*(bonjour|bonsoir|salut).*', request_text,  re.IGNORECASE):
-		bot.send_text(
-			chat_id=event.data['chat']['chatId'],
-			text="Bonjour {}".format(request_from),
-			reply_msg_id=request_msgid
-		)
-
-
 def mention_cb(bot, event):
 	if False:
 		bot.send_text(
@@ -1013,16 +1159,6 @@ def reply_to_message_cb(bot, event):
 def regexp_only_dig_cb(bot, event):
 	if False:
 		bot.send_text(chat_id=event.data['chat']['chatId'], text="Only numbers! yes!")
-
-
-def file_cb(bot, event):
-	if False:
-		bot.send_text(
-			chat_id=event.data['chat']['chatId'],
-			text="Files with {filed} fileId was received".format(
-				filed=", ".join([p['payload']['fileId'] for p in event.data['parts']])
-			)
-		)
 
 
 def image_cb(bot, event):

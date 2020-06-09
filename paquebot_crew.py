@@ -115,10 +115,32 @@ class Crew():
 		log.debug("Returning the list of crewmembers as json")
 		crew = []
 		for crewman in self.crew_ls:
-			crew.append(json.loads(crewman.get_asjson()))
+			crew.append({'crewman': json.loads(crewman.get_asjson())})
 
 		log.debug("Crew json : %s"%str(json.dumps(crew)))			
 		return json.dumps(crew)
+
+
+	def load_fromjson(self, json_str):
+		log.debug("Loading crew from json %s"%json_str)
+		for crewman in json.loads(json_str):
+			log.debug("creating/import crewman %s"%crewman)
+			if crewman["crewman"] and crewman["crewman"]["id"]:
+				if self.is_member(crewman["crewman"]["id"]):
+					# Updating crewman
+					log.debug("crewman %s already existing, just have to update it"%crewman["crewman"]["id"])
+					index = self.get_index(crewman["crewman"]["id"])
+					if index is not False:
+						if "grade" in crewman["crewman"]:
+							self.crew_ls[index].grade = crewman["crewman"]["grade"]
+						if "nickname" in crewman["crewman"]:	
+							self.crew_ls[index].nickname = crewman["crewman"]["nickname"]
+				else:
+					# Creating crewman
+					log.debug("crewman %s is not existing, creating it"%party["party"]["id"])
+					self.add(crewman["crewman"]["id"], crewman["crewman"]["nickname"], crewman["crewman"]["grade"])
+				
+		return True
 
 
 	# Count team members

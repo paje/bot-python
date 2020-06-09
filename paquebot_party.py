@@ -22,8 +22,8 @@ from bot.handler import HelpCommandHandler, UnknownCommandHandler, MessageHandle
 import paquebot_bot
 import paquebot_db as db
 
-
 log = logging.getLogger(__name__)
+
 
 class EnumEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -120,6 +120,9 @@ class PartyStorage(db.Base):
 		return json_values
 
 	def load_fromjson(self, json_str):
+
+		log.debug("Loading dta from json %s"%json_str)
+
 		json_values = json.loads(json_str)
 		for key, value in json_values.items():
 			if hasattr(self, key): # in self.__dict__.keys()
@@ -149,13 +152,47 @@ class Parties():
 		log.debug("Returning the list of parties as json")
 		parties = []
 		for party in self.parties_ls:
-			parties.append(json.loads(party.get_asjson()))
+			parties.append({'party': json.loads(party.get_asjson())})
 
 		log.debug("Parties json : %s"%str(json.dumps(parties)))			
 		return json.dumps(parties)
 
-
-
+	def load_fromjson(self, json_str):
+		log.debug("Loading parties from json %s"%json_str)
+		for party in json.loads(json_str):
+			log.debug("creating/import party %s"%party)
+			if party["party"] and party["party"]["id"]:
+				if self.exist(party["party"]["id"]):
+					# Updating party
+					log.debug("Party %s already existing, just have to update it"%party["party"]["id"])
+				else:
+					# Creating party
+					log.debug("Party %s is not existing, creating it"%party["party"]["id"])
+					self.add(party["party"]["id"])
+				
+				index = self.get_index(party["party"]["id"])
+				if index is not False:
+					if "status" in party["party"]:
+						self.parties_ls[index].status = party["party"]["status"]
+					if "timezone" in party["party"]:	
+						self.parties_ls[index].timezone = party["party"]["timezone"]
+					if "locale" in party["party"]:	
+						self.parties_ls[index].locale = party["party"]["locale"]
+					if "rules_msg" in party["party"]:	
+						self.parties_ls[index].rules_msg = party["party"]["rules_msg"]
+					if "authorized_charsets" in party["party"]:	
+						self.parties_ls[index].authorized_charsets = party["party"]["authorized_charsets"]
+					if "authorized_languages" in party["party"]:	
+						self.parties_ls[index].authorized_languages = party["party"]["authorized_languages"]
+					if "language_msg" in party["party"]:	
+						self.parties_ls[index].language_msg = party["party"]["language_msg"]
+					if "languageredemption_d" in party["party"]:	
+						self.parties_ls[index].languageredemption_d = party["party"]["languageredemption_d"]
+					if "languagewarning_msgid" in party["party"]:	
+						self.parties_ls[index].languagewarning_msgid = party["party"]["languagewarning_msgid"]
+				else:
+					log.error('errror accessing the party with id %s (no index)'%party["party"]["id"])
+		return True
 
 	def exist(self, cid):
 		log.debug('Parties: testing if a party exists %s'%(cid))

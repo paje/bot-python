@@ -270,3 +270,49 @@ def watch_url(bot, event):
 		
 		
 	return True
+
+
+def do_guestwelcome(bot, event):
+	'''
+	{
+		"events": [{
+			"eventId": 5,
+			"payload": {
+				"addedBy": {
+					"firstName": "Alapaje",
+					"userId": "12963645"
+				},
+				"chat": {
+					"chatId": "682765231@chat.agent",
+					"title": "Test_Paquebot",
+					"type": "group"
+				},
+				"newMembers": [{
+					"firstName": "Paquetest_bot",
+					"nick": "Paquetest_bot",
+					"userId": "753279654"
+				}]
+			},
+			"type": "newChatMembers"
+		}],
+		"ok": true
+	}
+	'''
+
+	if type in event and event["ok"] == "true" and event.type == "newChatMembers" :
+
+		place = "group"
+		if chat in event.data:
+			if chat_id in event["chat"]:
+				cid = event.data["chat"]["chatId"]
+			mid = ""
+		if addedBy in event.data:
+			if userId in event.data["addedBy"]:
+				from_uid = event.data["addedBy"]["userId"]
+
+		crew = bot.get_crew()
+
+
+
+def do_guestgoodbye(bot, event):
+	pass
