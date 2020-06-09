@@ -137,7 +137,7 @@ class Crew():
 							self.crew_ls[index].nickname = crewman["crewman"]["nickname"]
 				else:
 					# Creating crewman
-					log.debug("crewman %s is not existing, creating it"%party["party"]["id"])
+					log.debug("crewman %s is not existing, creating it"%crewman["crewman"]["id"])
 					self.add(crewman["crewman"]["id"], crewman["crewman"]["nickname"], crewman["crewman"]["grade"])
 				
 		return True
