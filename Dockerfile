@@ -1,4 +1,4 @@
-FROM alpine:latest
+FROM alpine:3.12
 
 ENV LANG=en_US.UTF-8
 
@@ -17,16 +17,16 @@ RUN pip3 install mailru-im-bot \
 	python-gettext \
 	alphabet-detector \
 	pytz \
-  jsons \
-  dnspython \
-  cached-property \
-  enum34 \
-  expiringdict \
-  monotonic \
-  python-baseconv \
-  requests \
-  six \
-  gTTS
+    jsons \
+    dnspython \
+    cached-property \
+    enum34 \
+    expiringdict \
+    monotonic \
+    python-baseconv \
+    requests \
+    six \
+    gTTS
 
 RUN mkdir /work
 
